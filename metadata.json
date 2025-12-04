@@ -1,0 +1,5 @@
+{
+  "name": "Pomodoro Focus Manager",
+  "description": "A comprehensive Pomodoro timer and project management tool with import/export capabilities.",
+  "requestFramePermissions": []
+}
