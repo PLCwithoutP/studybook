@@ -267,7 +267,9 @@ const App: React.FC = () => {
 
   // --- Import / Export ---
   const handleExport = () => {
-    const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '');
+    // Format: 04 December 2025
+    const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+    
     const currentSessionLog: AppSessionLog = {
       date: todayStr,
       duration: currentSessionDuration.current
