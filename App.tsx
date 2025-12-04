@@ -4,7 +4,8 @@ import { getIstanbulDate, generateId, calculateProjectStats, formatTime } from '
 import { Button } from './components/Button';
 import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
-import { Trash2, Plus, Play, Pause, SkipForward, Menu, Download, Upload, Clock, CheckCircle, MoreVertical, Settings, Target } from 'lucide-react';
+import { PerformanceGraph } from './components/PerformanceGraph';
+import { Trash2, Plus, Play, Pause, SkipForward, Menu, Download, Upload, Clock, CheckCircle, MoreVertical, Settings, Target, BarChart3 } from 'lucide-react';
 
 // --- Constants ---
 const POMODORO_TIME = 25 * 60;
@@ -28,6 +29,7 @@ const App: React.FC = () => {
   // --- UI State ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
+  const [isPerformanceModalOpen, setIsPerformanceModalOpen] = useState(false);
   
   // Form State
   const [newProjectName, setNewProjectName] = useState('');
@@ -307,6 +309,9 @@ const App: React.FC = () => {
           </div>
 
           <div className="mt-6 pt-6 border-t border-white/10 space-y-2">
+             <button onClick={() => setIsPerformanceModalOpen(true)} className="w-full flex items-center gap-3 px-4 py-2 rounded hover:bg-white/10 transition-colors text-sm">
+                <BarChart3 className="w-4 h-4" /> Performance
+             </button>
              <button onClick={handleExport} className="w-full flex items-center gap-3 px-4 py-2 rounded hover:bg-white/10 transition-colors text-sm">
                 <Download className="w-4 h-4" /> Export Data
              </button>
@@ -508,6 +513,17 @@ const App: React.FC = () => {
              <Button variant="secondary" onClick={() => setIsAddProjectModalOpen(false)} className="mr-2">Cancel</Button>
              <Button onClick={handleAddProject} className="bg-gray-800 text-white hover:bg-gray-900">Save Project</Button>
            </div>
+        </div>
+      </Modal>
+
+      {/* Performance Graph Modal */}
+      <Modal isOpen={isPerformanceModalOpen} onClose={() => setIsPerformanceModalOpen(false)} title="Performance History">
+        <div className="text-gray-800">
+          <p className="text-sm text-gray-500 mb-4">Daily app usage based on imported history.</p>
+          <PerformanceGraph data={appHistory} />
+          <div className="mt-4 flex justify-end">
+            <Button variant="secondary" onClick={() => setIsPerformanceModalOpen(false)}>Close</Button>
+          </div>
         </div>
       </Modal>
 
