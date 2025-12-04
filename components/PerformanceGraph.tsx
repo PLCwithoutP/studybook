@@ -6,8 +6,8 @@ interface PerformanceGraphProps {
 }
 
 export const PerformanceGraph: React.FC<PerformanceGraphProps> = ({ data }) => {
-  const chartData = useMemo(() => {
-    if (!data || data.length === 0) return [];
+  const { chartData, yAxisTicks, maxTick } = useMemo(() => {
+    if (!data || data.length === 0) return { chartData: [], yAxisTicks: [], maxTick: 0 };
 
     // Helper to parse duration string (hh:mm:ss or mm:ss) into minutes
     const parseDurationToMinutes = (dur: string): number => {
@@ -50,13 +50,29 @@ export const PerformanceGraph: React.FC<PerformanceGraphProps> = ({ data }) => {
     });
 
     // Convert to array and sort by date
-    return Object.entries(aggregated)
+    const cData = Object.entries(aggregated)
       .map(([date, minutes]) => ({
         dateLabel: date,
         dateObj: parseDateStr(date),
         minutes: minutes
       }))
       .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+
+    // Calculate Y-Axis Ticks
+    const maxVal = Math.max(...cData.map(d => d.minutes), 10); // Minimum 10 mins scale
+    
+    let step;
+    if (maxVal <= 60) step = 10;       // 10 min steps for short durations
+    else if (maxVal <= 180) step = 30; // 30 min steps for medium durations
+    else step = 60;                    // 1 hour steps for long durations
+
+    const top = Math.ceil(maxVal / step) * step;
+    const ticks = [];
+    for (let i = 0; i <= top; i += step) {
+      ticks.push(i);
+    }
+
+    return { chartData: cData, yAxisTicks: ticks, maxTick: top };
   }, [data]);
 
   if (chartData.length === 0) {
@@ -68,48 +84,84 @@ export const PerformanceGraph: React.FC<PerformanceGraphProps> = ({ data }) => {
     );
   }
 
-  const maxMinutes = Math.max(...chartData.map(d => d.minutes), 1);
-  const chartHeight = 200;
+  const formatTick = (mins: number) => {
+    if (mins === 0) return '0';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h > 0 && m > 0) return `${h}h${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m}m`;
+  };
 
   return (
-    <div className="w-full overflow-x-auto">
-      <div className="min-w-[300px] p-4">
-        <div className="flex items-end justify-between gap-4 h-[200px] border-b border-gray-300 pb-2">
-          {chartData.map((item, index) => {
-            const height = (item.minutes / maxMinutes) * chartHeight;
-            const hours = Math.floor(item.minutes / 60);
-            const mins = Math.round(item.minutes % 60);
-            const tooltip = `${hours}h ${mins}m`;
-
-            return (
-              <div key={index} className="flex flex-col items-center flex-1 group relative min-w-[40px]">
-                {/* Tooltip */}
-                <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap z-10 pointer-events-none">
-                  {tooltip}
-                </div>
-                
-                {/* Bar */}
-                <div 
-                  style={{ height: `${Math.max(height, 2)}px` }} 
-                  className="w-full bg-rose-500 rounded-t-sm hover:bg-rose-600 transition-all opacity-80 hover:opacity-100"
-                ></div>
-              </div>
-            );
-          })}
-        </div>
-        {/* Labels */}
-        <div className="flex justify-between gap-4 mt-2">
-          {chartData.map((item, index) => (
-            <div key={index} className="flex-1 text-center min-w-[40px]">
-              <span className="text-xs text-gray-500 font-mono -rotate-45 block origin-left translate-y-2 translate-x-2">
-                {item.dateLabel}
-              </span>
+    <div className="w-full">
+      <div className="flex gap-2">
+        {/* Y-Axis */}
+        <div className="flex flex-col justify-between items-end h-[200px] pb-6 text-xs text-gray-400 font-mono w-10 flex-shrink-0 select-none">
+          {yAxisTicks.slice().reverse().map((tick) => (
+            <div key={tick} className="transform translate-y-2">
+              {formatTick(tick)}
             </div>
           ))}
         </div>
-        <div className="mt-8 text-center text-sm text-gray-500">
-          Total study time per date (Hours:Minutes)
+
+        {/* Chart Area */}
+        <div className="flex-1 overflow-x-auto">
+          <div className="min-w-[300px] h-[224px] relative"> 
+            
+            {/* Grid Lines */}
+            <div className="absolute inset-0 h-[200px] pointer-events-none">
+              {yAxisTicks.map((tick) => (
+                <div 
+                  key={tick} 
+                  className="absolute w-full border-t border-gray-100"
+                  style={{ bottom: `${(tick / maxTick) * 100}%` }}
+                />
+              ))}
+            </div>
+
+            {/* Bars */}
+            <div className="absolute inset-0 h-[200px] flex items-end justify-around px-2 z-10">
+              {chartData.map((item, index) => {
+                const height = (item.minutes / maxTick) * 100;
+                const hours = Math.floor(item.minutes / 60);
+                const mins = Math.round(item.minutes % 60);
+                const tooltip = `${hours}h ${mins}m`;
+
+                return (
+                  <div key={index} className="flex flex-col items-center flex-1 group relative min-w-[30px] mx-1 h-full justify-end">
+                    {/* Tooltip */}
+                    <div className="absolute bottom-full mb-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap z-20 pointer-events-none shadow-md">
+                      {tooltip}
+                      <div className="text-[10px] text-gray-400">{item.dateLabel}</div>
+                    </div>
+                    
+                    {/* Bar */}
+                    <div 
+                      style={{ height: `${Math.max(height, 1)}%` }} 
+                      className="w-full bg-rose-500 rounded-t-sm hover:bg-rose-600 transition-all opacity-80 hover:opacity-100 relative"
+                    ></div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* X-Axis Labels */}
+            <div className="absolute top-[200px] left-0 w-full flex justify-around px-2 pt-2">
+              {chartData.map((item, index) => (
+                <div key={index} className="flex-1 text-center min-w-[30px] mx-1">
+                  <span className="text-[10px] text-gray-500 font-mono -rotate-45 block origin-top-left translate-x-3 w-full truncate">
+                    {item.dateLabel}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
+      </div>
+      
+      <div className="mt-8 text-center text-sm text-gray-400">
+        Total study time per date
       </div>
     </div>
   );

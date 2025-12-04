@@ -29,11 +29,16 @@ const App: React.FC = () => {
   // --- UI State ---
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
+  const [isAddSubtaskModalOpen, setIsAddSubtaskModalOpen] = useState(false);
   const [isPerformanceModalOpen, setIsPerformanceModalOpen] = useState(false);
   
   // Form State
   const [newProjectName, setNewProjectName] = useState('');
   const [newSubtasks, setNewSubtasks] = useState<{name: string, target: number}[]>([{name: '', target: 1}]);
+  
+  // Add Subtask Form State
+  const [subtaskToAddName, setSubtaskToAddName] = useState('');
+  const [subtaskToAddTarget, setSubtaskToAddTarget] = useState(1);
   
   // --- App Session Tracker ---
   const currentSessionDuration = useRef<string>("00:00:00");
@@ -158,6 +163,29 @@ const App: React.FC = () => {
     setNewProjectName('');
     setNewSubtasks([{name: '', target: 1}]);
     setIsAddProjectModalOpen(false);
+  };
+
+  const handleAddSubtask = () => {
+    if (!selectedProjectId || !subtaskToAddName.trim()) return;
+
+    const newSubtask = {
+      id: generateId(),
+      name: subtaskToAddName,
+      targetSessions: subtaskToAddTarget,
+      completedSessions: 0
+    };
+
+    setProjects(prev => prev.map(p => {
+      if (p.id !== selectedProjectId) return p;
+      return {
+        ...p,
+        subtasks: [...p.subtasks, newSubtask]
+      };
+    }));
+
+    setSubtaskToAddName('');
+    setSubtaskToAddTarget(1);
+    setIsAddSubtaskModalOpen(false);
   };
 
   const deleteProject = (id: string, e: React.MouseEvent) => {
@@ -489,6 +517,14 @@ const App: React.FC = () => {
                   );
                 })}
               </div>
+
+              {/* Add Subtask Button */}
+              <button
+                onClick={() => setIsAddSubtaskModalOpen(true)}
+                className="w-full py-3 mt-4 border-2 border-dashed border-white/20 rounded-xl hover:bg-white/10 text-white/70 flex items-center justify-center gap-2 transition-colors font-medium"
+              >
+                <Plus className="w-5 h-5" /> Add Subtask
+              </button>
             </div>
           )}
         </div>
@@ -562,6 +598,38 @@ const App: React.FC = () => {
            <div className="flex justify-end pt-4">
              <Button variant="secondary" onClick={() => setIsAddProjectModalOpen(false)} className="mr-2">Cancel</Button>
              <Button onClick={handleAddProject} className="bg-white text-black border border-gray-200 hover:bg-gray-50 shadow-sm">Save Project</Button>
+           </div>
+        </div>
+      </Modal>
+
+      {/* Add Subtask Modal */}
+      <Modal isOpen={isAddSubtaskModalOpen} onClose={() => setIsAddSubtaskModalOpen(false)} title="Add Subtask">
+        <div className="space-y-4 text-gray-800">
+           <div>
+             <label className="block text-sm font-medium mb-1">Subtask Name</label>
+             <input 
+               type="text"
+               value={subtaskToAddName}
+               onChange={(e) => setSubtaskToAddName(e.target.value)}
+               placeholder="e.g. Review Documentation"
+               className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+             />
+           </div>
+           
+           <div>
+             <label className="block text-sm font-medium mb-1">Target Sessions</label>
+             <input 
+               type="number"
+               min="1"
+               value={subtaskToAddTarget}
+               onChange={(e) => setSubtaskToAddTarget(parseInt(e.target.value) || 1)}
+               className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+             />
+           </div>
+
+           <div className="flex justify-end pt-4">
+             <Button variant="secondary" onClick={() => setIsAddSubtaskModalOpen(false)} className="mr-2">Cancel</Button>
+             <Button onClick={handleAddSubtask} className="bg-white text-black border border-gray-200 hover:bg-gray-50 shadow-sm">Add Subtask</Button>
            </div>
         </div>
       </Modal>
