@@ -5,7 +5,7 @@ import { Button } from './components/Button';
 import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
-import { Trash2, Plus, Play, Pause, SkipForward, Menu, Download, Upload, Clock, CheckCircle, MoreVertical, Settings, Target, BarChart3 } from 'lucide-react';
+import { Trash2, Plus, Play, Pause, SkipForward, Menu, Download, Upload, Clock, CheckCircle, MoreVertical, Settings, Target, BarChart3, X } from 'lucide-react';
 
 // --- Constants ---
 const POMODORO_TIME = 25 * 60;
@@ -168,6 +168,23 @@ const App: React.FC = () => {
     }
   };
 
+  const deleteSubtask = (projectId: string, subtaskId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm("Are you sure you want to delete this subtask?")) {
+      setProjects(prev => prev.map(p => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          subtasks: p.subtasks.filter(t => t.id !== subtaskId)
+        };
+      }));
+      
+      if (activeSubtaskId === subtaskId) {
+        setActiveSubtaskId(null);
+      }
+    }
+  };
+
   const updateSessionTarget = (projectId: string, subtaskId: string, increment: number) => {
     setProjects(prev => prev.map(p => {
       if (p.id !== projectId) return p;
@@ -213,11 +230,27 @@ const App: React.FC = () => {
     reader.onload = (e) => {
       try {
         const json = JSON.parse(e.target?.result as string) as AppData;
-        if (json.projects) setProjects(json.projects);
+        
+        if (json.projects) {
+          setProjects(json.projects);
+          // If the currently selected project doesn't exist in the new data, deselect it to avoid visual bugs
+          if (selectedProjectId && !json.projects.find(p => p.id === selectedProjectId)) {
+            setSelectedProjectId(null);
+            setActiveSubtaskId(null);
+          }
+        }
+        
         if (json.appHistory) setAppHistory(json.appHistory);
-        alert('Data imported successfully!');
+        
+        // Success feedback
+        console.log("Data imported successfully");
       } catch (err) {
         alert('Failed to parse JSON file.');
+      } finally {
+        // Reset file input so the same file can be selected again
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       }
     };
     reader.readAsText(file);
@@ -437,6 +470,13 @@ const App: React.FC = () => {
                              >
                                <Plus className="w-5 h-5" />
                              </button>
+                             <button
+                               onClick={(e) => deleteSubtask(selectedProject.id, task.id, e)}
+                               className="p-1 hover:bg-white/20 hover:text-red-300 rounded transition-colors text-white/70"
+                               title="Delete Subtask"
+                             >
+                               <Trash2 className="w-5 h-5" />
+                             </button>
                           </div>
                        </div>
                        
@@ -498,6 +538,16 @@ const App: React.FC = () => {
                      }}
                      className="w-16 border rounded px-2 py-2 text-sm text-center"
                    />
+                   {newSubtasks.length > 1 && (
+                     <button
+                       onClick={() => {
+                         setNewSubtasks(newSubtasks.filter((_, i) => i !== idx));
+                       }}
+                       className="p-2 text-gray-400 hover:text-red-500"
+                     >
+                       <Trash2 className="w-4 h-4" />
+                     </button>
+                   )}
                  </div>
                ))}
              </div>
@@ -511,7 +561,7 @@ const App: React.FC = () => {
 
            <div className="flex justify-end pt-4">
              <Button variant="secondary" onClick={() => setIsAddProjectModalOpen(false)} className="mr-2">Cancel</Button>
-             <Button onClick={handleAddProject} className="bg-gray-800 text-white hover:bg-gray-900">Save Project</Button>
+             <Button onClick={handleAddProject} className="bg-white text-black border border-gray-200 hover:bg-gray-50 shadow-sm">Save Project</Button>
            </div>
         </div>
       </Modal>
