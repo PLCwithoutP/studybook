@@ -407,14 +407,17 @@ const App: React.FC = () => {
                       key={task.id}
                       onClick={() => setActiveSubtaskId(task.id)}
                       className={`
-                        relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:bg-white/5
-                        ${isCompleted ? 'bg-emerald-500/20 border-emerald-400' : 'bg-white/10 border-rose-300'}
-                        ${isActiveTask ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02]' : ''}
+                        relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110
+                        ${isCompleted 
+                          ? 'bg-emerald-600/30 border-emerald-400' 
+                          : 'bg-rose-500/20 border-rose-300'
+                        }
+                        ${isActiveTask ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}
                       `}
                     >
                        <div className="flex justify-between items-center">
                           <div className="flex-1">
-                             <span className={`font-medium text-lg ${isCompleted ? 'line-through opacity-70' : ''}`}>
+                             <span className={`font-medium text-lg ${isCompleted ? 'line-through text-white/50 italic' : 'text-white'}`}>
                                {task.name}
                              </span>
                           </div>
