@@ -321,7 +321,17 @@ const App: React.FC = () => {
     reader.readAsText(file);
   };
 
-  const activeColor = settings.colors[timerMode];
+  // Helper to safely get the active theme color
+  const getThemeColor = (mode: TimerMode) => {
+    switch (mode) {
+      case TimerMode.SHORT_BREAK: return settings.colors.shortBreak;
+      case TimerMode.LONG_BREAK: return settings.colors.longBreak;
+      case TimerMode.POMODORO:
+      default: return settings.colors.pomodoro;
+    }
+  };
+
+  const activeColor = getThemeColor(timerMode);
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const selectedProjectStats = selectedProject ? calculateProjectStats(selectedProject.subtasks) : null;
   const activeSubtask = selectedProject?.subtasks.find(t => t.id === activeSubtaskId);
