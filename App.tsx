@@ -6,7 +6,7 @@ import { Button } from './components/Button';
 import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
-import { Trash2, Plus, Play, Pause, SkipForward, Menu, Download, Upload, Clock, CheckCircle, MoreVertical, Settings, Target, BarChart3, X } from 'lucide-react';
+import { Trash2, Plus, SkipForward, Menu, Download, Upload, CheckCircle, Settings, Target, BarChart3 } from 'lucide-react';
 
 // --- Default Constants ---
 const DEFAULT_SETTINGS: AppSettings = {
