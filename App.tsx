@@ -6,7 +6,7 @@ import { Button } from './components/Button';
 import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
-import { Trash2, Plus, SkipForward, Menu, Download, Upload, CheckCircle, Settings, Target, BarChart3 } from 'lucide-react';
+import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, CheckCircle, Settings, Target, BarChart3 } from 'lucide-react';
 
 // --- Default Constants ---
 const DEFAULT_SETTINGS: AppSettings = {
@@ -258,7 +258,13 @@ const App: React.FC = () => {
         ...p,
         subtasks: p.subtasks.map(t => {
           if (t.id !== subtaskId) return t;
-          const newTarget = Math.max(0, t.targetSessions + increment);
+          
+          let newTarget = t.targetSessions + increment;
+          // Ensure target doesn't drop below completed sessions
+          if (newTarget < t.completedSessions) newTarget = t.completedSessions;
+          // Ensure target is at least 1 (unless it's 0 completed, but usually we want at least 1)
+          if (newTarget < 1) newTarget = 1;
+          
           return { ...t, targetSessions: newTarget };
         })
       };
@@ -536,15 +542,11 @@ const App: React.FC = () => {
                       className={`
                         relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110
                         ${isCompleted 
-                          ? 'bg-emerald-600/30 border-emerald-400' 
-                          : 'border-rose-300' // Base class, dynamic bg below
+                          ? 'bg-emerald-500/20 border-emerald-400' 
+                          : 'bg-rose-500/10 border-rose-300' 
                         }
                         ${isActiveTask ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}
                       `}
-                      style={!isCompleted ? { 
-                        backgroundColor: hexToRgba(settings.colors.pomodoro, 0.2), 
-                        borderColor: hexToRgba(settings.colors.pomodoro, 0.5) 
-                      } : {}}
                     >
                        <div className="flex justify-between items-center">
                           <div className="flex-1">
@@ -556,13 +558,25 @@ const App: React.FC = () => {
                              <div className="font-mono text-lg font-bold">
                                {task.completedSessions} <span className="opacity-50 text-sm">/ {task.targetSessions}</span>
                              </div>
-                             <button 
-                               onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, 1); }}
-                               className="p-1 hover:bg-white/20 rounded transition-colors"
-                               title="Add Session"
-                             >
-                               <Plus className="w-5 h-5" />
-                             </button>
+                             
+                             <div className="flex items-center gap-1 bg-black/20 rounded-lg p-1">
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, -1); }}
+                                 className="p-1 hover:bg-white/20 rounded transition-colors text-white/80 hover:text-white disabled:opacity-30"
+                                 title="Remove Session"
+                                 disabled={task.targetSessions <= task.completedSessions || task.targetSessions <= 1}
+                               >
+                                 <Minus className="w-4 h-4" />
+                               </button>
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, 1); }}
+                                 className="p-1 hover:bg-white/20 rounded transition-colors text-white/80 hover:text-white"
+                                 title="Add Session"
+                               >
+                                 <Plus className="w-4 h-4" />
+                               </button>
+                             </div>
+
                              <button
                                onClick={(e) => deleteSubtask(selectedProject.id, task.id, e)}
                                className="p-1 hover:bg-white/20 hover:text-red-300 rounded transition-colors text-white/70"
@@ -642,36 +656,30 @@ const App: React.FC = () => {
              <div className="grid grid-cols-3 gap-4">
                <div>
                  <label className="block text-sm text-gray-500 mb-1">Pomodoro</label>
-                 <div className="flex gap-2 items-center bg-gray-100 rounded p-2">
-                   <input 
-                     type="color" 
-                     value={settings.colors.pomodoro}
-                     onChange={(e) => setSettings({...settings, colors: {...settings.colors, pomodoro: e.target.value}})}
-                     className="w-8 h-8 rounded cursor-pointer border-none bg-transparent p-0"
-                   />
-                 </div>
+                 <input 
+                   type="color" 
+                   value={settings.colors.pomodoro}
+                   onChange={(e) => setSettings({...settings, colors: {...settings.colors, pomodoro: e.target.value}})}
+                   className="w-full h-10 rounded cursor-pointer border border-gray-200 p-1"
+                 />
                </div>
                <div>
                  <label className="block text-sm text-gray-500 mb-1">Short Break</label>
-                 <div className="flex gap-2 items-center bg-gray-100 rounded p-2">
-                   <input 
-                     type="color" 
-                     value={settings.colors.shortBreak}
-                     onChange={(e) => setSettings({...settings, colors: {...settings.colors, shortBreak: e.target.value}})}
-                     className="w-8 h-8 rounded cursor-pointer border-none bg-transparent p-0"
-                   />
-                 </div>
+                 <input 
+                   type="color" 
+                   value={settings.colors.shortBreak}
+                   onChange={(e) => setSettings({...settings, colors: {...settings.colors, shortBreak: e.target.value}})}
+                   className="w-full h-10 rounded cursor-pointer border border-gray-200 p-1"
+                 />
                </div>
                <div>
                  <label className="block text-sm text-gray-500 mb-1">Long Break</label>
-                 <div className="flex gap-2 items-center bg-gray-100 rounded p-2">
-                   <input 
-                     type="color" 
-                     value={settings.colors.longBreak}
-                     onChange={(e) => setSettings({...settings, colors: {...settings.colors, longBreak: e.target.value}})}
-                     className="w-8 h-8 rounded cursor-pointer border-none bg-transparent p-0"
-                   />
-                 </div>
+                 <input 
+                   type="color" 
+                   value={settings.colors.longBreak}
+                   onChange={(e) => setSettings({...settings, colors: {...settings.colors, longBreak: e.target.value}})}
+                   className="w-full h-10 rounded cursor-pointer border border-gray-200 p-1"
+                 />
                </div>
              </div>
            </div>
