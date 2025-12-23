@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Project, AppSettings } from '../types';
 import { ChevronRight, ChevronDown, FileSpreadsheet } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx';
 
 interface GanttTimelineProps {
   projects: Project[];
@@ -56,78 +56,145 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
     return { start: minStart, end: maxEnd, days };
   }, [projects, dailyTarget]);
 
-  const exportToODS = () => {
+  const exportToStyledSpreadsheet = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Color definitions (Hex without # for XLSX style)
+    const COLORS = {
+      BLACK: "000000",
+      WHITE: "FFFFFF",
+      GREEN: "4ADE80", // OK
+      RED: "F87171",   // INCOMPLETE
+      YELLOW: "FACC15", // FUTURE
+      GREY: "F3F4F6"
+    };
+
     const data: any[] = [];
     
-    // Header row
-    data.push([
-      "Type", 
-      "Project/Subtask Name", 
-      "Start Date", 
-      "Estimated End Date", 
-      "Target Pomodoros", 
-      "Completed", 
-      "Progress (%)"
-    ]);
+    // 1. LEGEND WITH COLORS
+    data.push([{ v: "GANTT CHART LEGEND", s: { font: { bold: true } } }]);
+    data.push([{ v: "NOW", s: { fill: { fgColor: { rgb: COLORS.BLACK } }, font: { color: { rgb: COLORS.WHITE } } } }, { v: "Current Day" }]);
+    data.push([{ v: "OK", s: { fill: { fgColor: { rgb: COLORS.GREEN } } } }, { v: "Completed Work" }]);
+    data.push([{ v: "!", s: { fill: { fgColor: { rgb: COLORS.RED } } } }, { v: "Incomplete Past Work" }]);
+    data.push([{ v: "...", s: { fill: { fgColor: { rgb: COLORS.YELLOW } } } }, { v: "Future Scheduled" }]);
+    data.push([]); // Spacer
 
+    // 2. HEADER ROW (Dates)
+    // FIX: Using any[] to avoid strict type inference which causes "missing property" errors on later pushes
+    const headerRow: any[] = [{ v: "Project / Subtask", s: { font: { bold: true }, fill: { fgColor: { rgb: "E5E7EB" } } } }];
+    timelineRange.days.forEach(day => {
+      const isToday = day.getTime() === today.getTime();
+      headerRow.push({ 
+        v: day.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
+        s: { 
+          font: { bold: true, color: { rgb: isToday ? COLORS.WHITE : "000000" } },
+          fill: { fgColor: { rgb: isToday ? COLORS.BLACK : "E5E7EB" } },
+          alignment: { horizontal: "center" }
+        }
+      });
+    });
+    data.push(headerRow);
+
+    // 3. PROJECT ROWS
     projects.forEach(project => {
-      const start = new Date(project.createdAt);
-      const totalPoms = project.subtasks.reduce((sum, s) => sum + s.targetSessions, 0);
-      const completedPoms = project.subtasks.reduce((sum, s) => sum + s.completedSessions, 0);
-      const durationDays = Math.ceil(totalPoms / dailyTarget);
-      const end = new Date(start);
-      end.setDate(start.getDate() + durationDays);
+      const projectStart = new Date(project.createdAt);
+      projectStart.setHours(0, 0, 0, 0);
+      const totalTarget = project.subtasks.reduce((sum, s) => sum + s.targetSessions, 0);
+      const totalDone = project.subtasks.reduce((sum, s) => sum + s.completedSessions, 0);
+      const totalDurationDays = Math.ceil(totalTarget / dailyTarget);
+      const completedDays = Math.floor(totalDone / dailyTarget);
 
-      // Add Project Row
-      data.push([
-        "PROJECT",
-        project.name,
-        start.toLocaleDateString(),
-        end.toLocaleDateString(),
-        totalPoms,
-        completedPoms,
-        totalPoms > 0 ? Math.round((completedPoms / totalPoms) * 100) : 0
-      ]);
+      // FIX: Using any[] for projectRow
+      const projectRow: any[] = [{ v: project.name, s: { font: { bold: true } } }];
 
-      // Add Subtask Rows
-      let cumulativeSessions = 0;
+      timelineRange.days.forEach(day => {
+        const diffDays = Math.floor((day.getTime() - projectStart.getTime()) / (1000 * 60 * 60 * 24));
+        const isInside = diffDays >= 0 && diffDays < totalDurationDays;
+
+        if (!isInside) {
+          projectRow.push({ v: "" });
+        } else {
+          let style: any = { alignment: { horizontal: "center" } };
+          let val = "";
+
+          if (day.getTime() === today.getTime()) {
+            style.fill = { fgColor: { rgb: COLORS.BLACK } };
+            style.font = { color: { rgb: COLORS.WHITE } };
+            val = "NOW";
+          } else if (day.getTime() < today.getTime()) {
+            const isDone = diffDays < completedDays;
+            style.fill = { fgColor: { rgb: isDone ? COLORS.GREEN : COLORS.RED } };
+            val = isDone ? "OK" : "!";
+          } else {
+            style.fill = { fgColor: { rgb: COLORS.YELLOW } };
+            val = "...";
+          }
+          projectRow.push({ v: val, s: style });
+        }
+      });
+      data.push(projectRow);
+
+      // 4. SUBTASK ROWS
+      let cumulativeTarget = 0;
       project.subtasks.forEach(task => {
-        const taskStartOffset = cumulativeSessions / dailyTarget;
-        const taskDuration = task.targetSessions / dailyTarget;
-        
-        const taskStartDate = new Date(start);
-        taskStartDate.setDate(start.getDate() + Math.floor(taskStartOffset));
-        
-        const taskEndDate = new Date(taskStartDate);
-        taskEndDate.setDate(taskStartDate.getDate() + Math.ceil(taskDuration));
+        // FIX: Using any[] for taskRow
+        const taskRow: any[] = [{ v: `  - ${task.name}`, s: { font: { italic: true } } }];
+        const taskStartOffset = Math.floor(cumulativeTarget / dailyTarget);
+        const taskDurationDays = Math.ceil(task.targetSessions / dailyTarget);
+        const taskCompletedDays = Math.floor(task.completedSessions / dailyTarget);
 
-        data.push([
-          "SUBTASK",
-          `  - ${task.name}`,
-          taskStartDate.toLocaleDateString(),
-          taskEndDate.toLocaleDateString(),
-          task.targetSessions,
-          task.completedSessions,
-          task.targetSessions > 0 ? Math.round((task.completedSessions / task.targetSessions) * 100) : 0
-        ]);
+        timelineRange.days.forEach(day => {
+          const diffDays = Math.floor((day.getTime() - projectStart.getTime()) / (1000 * 60 * 60 * 24));
+          const isInsideTask = diffDays >= taskStartOffset && diffDays < (taskStartOffset + taskDurationDays);
 
-        cumulativeSessions += task.targetSessions;
+          if (!isInsideTask) {
+            taskRow.push({ v: "" });
+          } else {
+            let style: any = { alignment: { horizontal: "center" } };
+            let val = "";
+            const relativeDayInTask = diffDays - taskStartOffset;
+
+            if (day.getTime() === today.getTime()) {
+              style.fill = { fgColor: { rgb: COLORS.BLACK } };
+              style.font = { color: { rgb: COLORS.WHITE } };
+              val = "NOW";
+            } else if (day.getTime() < today.getTime()) {
+              const isDone = relativeDayInTask < taskCompletedDays;
+              style.fill = { fgColor: { rgb: isDone ? COLORS.GREEN : COLORS.RED } };
+              val = isDone ? "OK" : "!";
+            } else {
+              style.fill = { fgColor: { rgb: COLORS.YELLOW } };
+              val = "...";
+            }
+            taskRow.push({ v: val, s: style });
+          }
+        });
+        cumulativeTarget += task.targetSessions;
+        data.push(taskRow);
       });
 
-      // Blank row for readability
-      data.push([]);
+      data.push([]); // Spacer
     });
 
     try {
       const worksheet = XLSX.utils.aoa_to_sheet(data);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Gantt Timeline");
       
-      // Generate .ods file
-      XLSX.writeFile(workbook, `Studybook_Gantt_${new Date().toISOString().split('T')[0]}.ods`);
+      // Column widths
+      const wscols = [{ wch: 35 }]; // Name column
+      for (let i = 0; i < timelineRange.days.length; i++) {
+        wscols.push({ wch: 6 }); // Tiny date columns for "grid" feel
+      }
+      worksheet['!cols'] = wscols;
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Styled Gantt");
+      
+      // Export as .xlsx because styles are most reliable in this format
+      XLSX.writeFile(workbook, `Studybook_Colored_Gantt_${new Date().toISOString().split('T')[0]}.xlsx`);
     } catch (err) {
-      console.error("Export to ODS failed", err);
-      alert("Failed to generate ODS file. Make sure the library is installed.");
+      console.error("Export failed", err);
+      alert("Failed to generate styled spreadsheet.");
     }
   };
 
@@ -270,11 +337,11 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
 
       <div className="flex justify-center pb-4">
         <button 
-          onClick={exportToODS}
+          onClick={exportToStyledSpreadsheet}
           className="flex items-center gap-3 px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-bold shadow-xl transition-all active:scale-95 group"
         >
           <FileSpreadsheet className="w-5 h-5 group-hover:scale-110 transition-transform" />
-          Export Timeline to .ods
+          Export Colored Spreadsheet (.xlsx)
         </button>
       </div>
     </div>
