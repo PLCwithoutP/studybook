@@ -31,6 +31,7 @@ export interface AppSettings {
   };
   autoStartBreaks: boolean;
   autoStartPomodoros: boolean;
+  dailyPomodoroTarget: number;
 }
 
 export interface AppData {

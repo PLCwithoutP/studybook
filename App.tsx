@@ -20,7 +20,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     longBreak: '#3b82f6'
   },
   autoStartBreaks: false,
-  autoStartPomodoros: false
+  autoStartPomodoros: false,
+  dailyPomodoroTarget: 6
 };
 
 const App: React.FC = () => {
@@ -262,7 +263,7 @@ const App: React.FC = () => {
                 <h2 className="text-3xl font-bold flex items-center gap-3"><CalendarIcon className="w-8 h-8" /> Calendar & Timelines</h2>
                 <button onClick={() => setIsCalendarViewOpen(false)} className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-lg hover:bg-white/30 transition-colors"><ArrowLeft className="w-4 h-4" /> Back to Timer</button>
               </div>
-              <CalendarView history={appHistory} projects={projects} />
+              <CalendarView history={appHistory} projects={projects} settings={settings} />
             </div>
           ) : (
             <>
@@ -346,6 +347,16 @@ const App: React.FC = () => {
                    <input type="number" value={settings.durations[key as keyof typeof settings.durations]} onChange={(e) => setSettings({...settings, durations: {...settings.durations, [key]: parseInt(e.target.value) || 1}})} className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800" />
                  </div>
                ))}
+             </div>
+           </div>
+           <div>
+             <h3 className="text-gray-400 uppercase text-xs font-bold tracking-wider mb-3">Targeting</h3>
+             <div className="grid grid-cols-1 gap-4">
+               <div>
+                 <label className="block text-sm text-gray-500 mb-1">Daily Pomodoro Target</label>
+                 <input type="number" min="1" value={settings.dailyPomodoroTarget} onChange={(e) => setSettings({...settings, dailyPomodoroTarget: parseInt(e.target.value) || 1})} className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800" />
+                 <p className="text-[10px] text-gray-400 mt-1 italic">Used for estimating project spans on the calendar.</p>
+               </div>
              </div>
            </div>
            <div>

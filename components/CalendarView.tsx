@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Project, AppSessionLog } from '../types';
+import { Project, AppSessionLog, AppSettings } from '../types';
 import { MonthlyCalendar } from './MonthlyCalendar';
 import { GanttChart } from './GanttChart';
 import { LayoutGrid, BarChart } from 'lucide-react';
@@ -7,11 +7,12 @@ import { LayoutGrid, BarChart } from 'lucide-react';
 interface CalendarViewProps {
   history: AppSessionLog[];
   projects: Project[];
+  settings: AppSettings;
 }
 
 type Tab = 'monthly' | 'gantt';
 
-export const CalendarView: React.FC<CalendarViewProps> = ({ history, projects }) => {
+export const CalendarView: React.FC<CalendarViewProps> = ({ history, projects, settings }) => {
   const [activeTab, setActiveTab] = useState<Tab>('monthly');
 
   return (
@@ -35,7 +36,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ history, projects })
 
       <div className="animate-fade-in">
         {activeTab === 'monthly' ? (
-          <MonthlyCalendar history={history} />
+          <MonthlyCalendar history={history} projects={projects} settings={settings} />
         ) : (
           <GanttChart projects={projects} />
         )}
