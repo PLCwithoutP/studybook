@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Studybook</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Shim process.env for modules that expect it (like React)
+      window.process = { env: { NODE_ENV: 'development' } };
+    </script>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap');
       
@@ -16,23 +20,24 @@
         font-family: 'Space Mono', monospace;
       }
 
-      /* Custom Scrollbar for Webkit */
+      /* Custom Scrollbar */
       ::-webkit-scrollbar {
           width: 8px;
+          height: 8px;
       }
       ::-webkit-scrollbar-track {
-          background: rgba(255, 255, 255, 0.1); 
+          background: rgba(255, 255, 255, 0.05); 
       }
       ::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.3); 
+          background: rgba(255, 255, 255, 0.2); 
           border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.5); 
+          background: rgba(255, 255, 255, 0.3); 
       }
 
       .animate-fade-in {
-        animation: fadeIn 0.5s ease-out;
+        animation: fadeIn 0.4s ease-out;
       }
       
       .animate-fade-in-up {
@@ -45,24 +50,35 @@
       }
 
       @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(20px); }
+        from { opacity: 0; transform: translateY(15px); }
         to { opacity: 1; transform: translateY(0); }
+      }
+      
+      .scrollbar-none::-webkit-scrollbar {
+        display: none;
+      }
+      .scrollbar-none {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
       }
     </style>
 <script type="importmap">
 {
   "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
-    "vite": "https://aistudiocdn.com/vite@^7.2.6",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
-    "react": "https://aistudiocdn.com/react@^19.2.1",
-    "react/": "https://aistudiocdn.com/react@^19.2.1/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0"
+    "react": "https://esm.sh/react@19",
+    "react-dom": "https://esm.sh/react-dom@19",
+    "react-dom/client": "https://esm.sh/react-dom@19/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.455.0?external=react",
+    "xlsx": "https://esm.sh/xlsx@0.20.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "vite": "https://esm.sh/vite@^7.3.0",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>
 </head>
-<body>
+<body class="bg-gray-900">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
 </body>
