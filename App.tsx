@@ -6,7 +6,7 @@ import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
 import { CalendarView } from './components/CalendarView';
-import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, CheckCircle, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon } from 'lucide-react';
+import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon } from 'lucide-react';
 
 const DEFAULT_SETTINGS: AppSettings = {
   durations: {
@@ -212,7 +212,7 @@ const App: React.FC = () => {
       <div className={`fixed inset-y-0 left-0 z-30 w-80 bg-black/20 backdrop-blur-md border-r border-white/10 transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0`}>
         <div className="p-6 flex flex-col h-full">
           <div className="flex justify-between items-center mb-6">
-             <h1 className="text-2xl font-bold flex items-center gap-2 select-none"><CheckCircle className="w-6 h-6" /> Studybook</h1>
+             <h1 className="text-2xl font-bold flex items-center gap-2 select-none"><Book className="w-6 h-6" /> Studybook</h1>
              <button onClick={() => setIsSidebarOpen(false)} className="md:hidden"><Menu className="w-6 h-6" /></button>
           </div>
           <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-white/30">
