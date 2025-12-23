@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AppData, Project, TimerMode, AppSessionLog, AppSettings } from './types';
 import { getIstanbulDate, generateId, calculateProjectStats, formatTime, hexToRgba } from './utils';
 import { Button } from './components/Button';
@@ -24,7 +23,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   autoStartPomodoros: false
 };
 
-// --- Main Component ---
 const App: React.FC = () => {
   // --- Global State ---
   const [projects, setProjects] = useState<Project[]>([]);
@@ -62,13 +60,15 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Initialize Audio
+  // STABLE CALLBACK: Prevents AppSessionTimer from resetting its interval
+  const handleAppTimerUpdate = useCallback((time: string) => {
+    currentSessionDuration.current = time;
+  }, []);
+
   useEffect(() => {
-    // Simple beep sound
     audioRef.current = new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');
   }, []);
 
-  // Update timeLeft when settings duration changes (and timer is not active)
   useEffect(() => {
     if (!isActive) {
       if (timerMode === TimerMode.POMODORO) setTimeLeft(settings.durations.pomodoro * 60);
@@ -77,7 +77,6 @@ const App: React.FC = () => {
     }
   }, [settings.durations, timerMode, isActive]);
 
-  // Update current time for UI
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(interval);
@@ -98,7 +97,6 @@ const App: React.FC = () => {
     }
   };
 
-  // --- Timer Logic ---
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
 
@@ -111,10 +109,8 @@ const App: React.FC = () => {
     }
 
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, timeLeft]);
 
-  // Update document title with timer
   useEffect(() => {
     document.title = `${formatTime(timeLeft)} - ${timerMode === TimerMode.POMODORO ? 'Focus' : 'Break'}`;
   }, [timeLeft, timerMode]);
@@ -126,12 +122,10 @@ const App: React.FC = () => {
       const nextPomoCount = pomoCount + 1;
       setPomoCount(nextPomoCount);
 
-      // Update active subtask if one exists
       if (activeSubtaskId && selectedProjectId) {
          updateSubtaskProgress(selectedProjectId, activeSubtaskId);
       }
 
-      // Determine next break
       let nextMode = TimerMode.SHORT_BREAK;
       let nextTime = settings.durations.shortBreak * 60;
       let title = "Time for a break!";
@@ -152,7 +146,6 @@ const App: React.FC = () => {
       }
 
     } else {
-      // Break is over
       setTimerMode(TimerMode.POMODORO);
       setTimeLeft(settings.durations.pomodoro * 60);
       sendNotification("Time to focus!", "Break is over. Let's get back to work.");
@@ -186,7 +179,6 @@ const App: React.FC = () => {
     handleTimerComplete();
   };
 
-  // --- Project Management ---
   const handleAddProject = () => {
     if (!newProjectName.trim()) return;
 
@@ -267,9 +259,7 @@ const App: React.FC = () => {
           if (t.id !== subtaskId) return t;
           
           let newTarget = t.targetSessions + increment;
-          // Ensure target doesn't drop below completed sessions
           if (newTarget < t.completedSessions) newTarget = t.completedSessions;
-          // Ensure target is at least 1 (unless it's 0 completed, but usually we want at least 1)
           if (newTarget < 1) newTarget = 1;
           
           return { ...t, targetSessions: newTarget };
@@ -278,9 +268,7 @@ const App: React.FC = () => {
     }));
   };
 
-  // --- Import / Export ---
   const handleExport = () => {
-    // Format: 04 December 2025
     const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
     
     const currentSessionLog: AppSessionLog = {
@@ -312,31 +300,18 @@ const App: React.FC = () => {
     reader.onload = (e) => {
       try {
         const json = JSON.parse(e.target?.result as string) as AppData;
-        
-        if (json.projects) {
-          setProjects(json.projects);
-          if (selectedProjectId && !json.projects.find(p => p.id === selectedProjectId)) {
-            setSelectedProjectId(null);
-            setActiveSubtaskId(null);
-          }
-        }
-        
+        if (json.projects) setProjects(json.projects);
         if (json.appHistory) setAppHistory(json.appHistory);
         if (json.settings) setSettings(json.settings);
-        
-        console.log("Data imported successfully");
       } catch (err) {
         alert('Failed to parse JSON file.');
       } finally {
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
     };
     reader.readAsText(file);
   };
 
-  // Helper to safely get the active theme color
   const getThemeColor = (mode: TimerMode) => {
     switch (mode) {
       case TimerMode.SHORT_BREAK: return settings.colors.shortBreak;
@@ -351,48 +326,20 @@ const App: React.FC = () => {
   const selectedProjectStats = selectedProject ? calculateProjectStats(selectedProject.subtasks) : null;
   const activeSubtask = selectedProject?.subtasks.find(t => t.id === activeSubtaskId);
 
-  // Calculate Progress for the visual bar
-  const getTotalDurationForMode = () => {
-    switch (timerMode) {
-      case TimerMode.SHORT_BREAK: return settings.durations.shortBreak * 60;
-      case TimerMode.LONG_BREAK: return settings.durations.longBreak * 60;
-      case TimerMode.POMODORO:
-      default: return settings.durations.pomodoro * 60;
-    }
-  };
-  
-  const totalDuration = getTotalDurationForMode();
+  const totalDuration = timerMode === TimerMode.POMODORO ? settings.durations.pomodoro * 60 : (timerMode === TimerMode.SHORT_BREAK ? settings.durations.shortBreak * 60 : settings.durations.longBreak * 60);
   const progressPercentage = Math.min(100, Math.max(0, (timeLeft / totalDuration) * 100));
 
-  // --- Right Side Project Bar Calculation ---
   const projectBarSegments = useMemo(() => {
     if (!selectedProject) return [];
-    
     const segments: string[] = [];
-    
     selectedProject.subtasks.forEach(task => {
       const isTaskActive = task.id === activeSubtaskId;
-      
       for (let i = 0; i < task.targetSessions; i++) {
-        let colorClass = '';
-        
-        // 1. Completed sessions
-        if (i < task.completedSessions) {
-          colorClass = 'bg-teal-800'; // Dark Teal
-        } 
-        // 2. Remaining sessions in active subtask
-        else if (isTaskActive) {
-          colorClass = 'bg-yellow-400'; // Yellow
-        } 
-        // 3. Remaining sessions in non-active/unfinished subtask
-        else {
-          colorClass = 'bg-red-900'; // Dark Red
-        }
-        
-        segments.push(colorClass);
+        if (i < task.completedSessions) segments.push('bg-teal-800');
+        else if (isTaskActive) segments.push('bg-yellow-400');
+        else segments.push('bg-red-900');
       }
     });
-    
     return segments;
   }, [selectedProject, activeSubtaskId]);
 
@@ -401,13 +348,13 @@ const App: React.FC = () => {
       className="min-h-screen transition-colors duration-500 ease-in-out font-sans flex flex-col md:flex-row text-white overflow-hidden relative"
       style={{ backgroundColor: activeColor }}
     >
-      {/* Project Progress Bar (Right Side) */}
+      {/* Project Progress Bar (Right Side) - Unnoticeable divisions via border-black/5 */}
       {selectedProject && (
         <div className="fixed right-0 top-0 bottom-0 w-3 flex flex-col z-40 bg-black/10">
           {projectBarSegments.map((colorClass, idx) => (
             <div 
               key={idx} 
-              className={`w-full flex-1 transition-all duration-300 ${colorClass} border-b border-black/10`} 
+              className={`w-full flex-1 transition-all duration-300 ${colorClass} border-b border-black/5`} 
             />
           ))}
         </div>
@@ -486,24 +433,17 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col h-screen overflow-y-auto relative bg-transparent pr-4">
-        {/* Mobile Header Toggle */}
         <div className="md:hidden p-4 absolute top-0 left-0 z-20">
           <button onClick={() => setIsSidebarOpen(true)} className="p-2 bg-white/20 rounded-md backdrop-blur-sm">
             <Menu className="w-6 h-6" />
           </button>
         </div>
 
-        {/* Content Container */}
         <div className="max-w-4xl mx-auto w-full p-4 md:p-8 flex flex-col items-center">
-          
-          {/* Header Info */}
           <div className="text-center mb-8 animate-fade-in mt-12 md:mt-0 w-full max-w-md">
             <h2 className="text-3xl font-bold mb-2">Welcome Back, Furkan</h2>
             <p className="text-white/80 text-lg opacity-90 mb-4">{getIstanbulDate()}</p>
-            
-            {/* Session Progress Bar */}
             <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden backdrop-blur-sm">
               <div 
                 className="h-full bg-white transition-all duration-1000 ease-linear shadow-[0_0_10px_rgba(255,255,255,0.5)]"
@@ -512,7 +452,6 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Timer Card */}
           <div className="bg-white/10 backdrop-blur-md rounded-3xl p-8 w-full max-w-[480px] shadow-2xl mb-8 transform transition-all duration-300">
             <div className="flex justify-center gap-2 mb-8 bg-black/20 p-1 rounded-full self-center mx-auto w-fit">
                {[TimerMode.POMODORO, TimerMode.SHORT_BREAK, TimerMode.LONG_BREAK].map(mode => (
@@ -544,7 +483,6 @@ const App: React.FC = () => {
                >
                  {isActive ? 'Pause' : 'Start'}
                </button>
-               
                {isActive && (
                  <button onClick={skipTimer} className="p-4 bg-white/20 rounded-2xl hover:bg-white/30 transition-colors">
                    <SkipForward className="w-8 h-8" />
@@ -553,7 +491,6 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Current Task Indicator */}
           <div className="mb-8 text-center h-8">
              {activeSubtask ? (
                <div className="text-lg font-medium opacity-90">
@@ -564,7 +501,6 @@ const App: React.FC = () => {
              )}
           </div>
 
-          {/* Selected Project Details */}
           {selectedProject && selectedProjectStats && (
             <div className="w-full max-w-[480px] animate-fade-in-up">
               <div className="flex justify-between items-end mb-4 border-b border-white/30 pb-2">
@@ -584,17 +520,13 @@ const App: React.FC = () => {
                 {selectedProject.subtasks.map(task => {
                   const isCompleted = task.completedSessions >= task.targetSessions;
                   const isActiveTask = activeSubtaskId === task.id;
-                  
                   return (
                     <div 
                       key={task.id}
                       onClick={() => setActiveSubtaskId(task.id)}
                       className={`
                         relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110
-                        ${isCompleted 
-                          ? 'bg-emerald-500/20 border-emerald-400' 
-                          : 'bg-rose-500/10 border-rose-300' 
-                        }
+                        ${isCompleted ? 'bg-emerald-500/20 border-emerald-400' : 'bg-rose-500/10 border-rose-300' }
                         ${isActiveTask ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}
                       `}
                     >
@@ -608,7 +540,6 @@ const App: React.FC = () => {
                              <div className="font-mono text-lg font-bold">
                                {task.completedSessions} <span className="opacity-50 text-sm">/ {task.targetSessions}</span>
                              </div>
-                             
                              <div className="flex items-center gap-1 bg-black/20 rounded-lg p-1">
                                <button 
                                  onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, -1); }}
@@ -626,32 +557,18 @@ const App: React.FC = () => {
                                  <Plus className="w-4 h-4" />
                                </button>
                              </div>
-
-                             <button
-                               onClick={(e) => deleteSubtask(selectedProject.id, task.id, e)}
-                               className="p-1 hover:bg-white/20 hover:text-red-300 rounded transition-colors text-white/70"
-                               title="Delete Subtask"
-                             >
+                             <button onClick={(e) => deleteSubtask(selectedProject.id, task.id, e)} className="p-1 hover:bg-white/20 hover:text-red-300 rounded transition-colors text-white/70">
                                <Trash2 className="w-5 h-5" />
                              </button>
                           </div>
                        </div>
-                       
-                       {isActiveTask && (
-                         <div className="absolute -right-2 -top-2 bg-white text-gray-900 rounded-full p-1 shadow-sm">
-                           <Target className="w-4 h-4" />
-                         </div>
-                       )}
+                       {isActiveTask && <div className="absolute -right-2 -top-2 bg-white text-gray-900 rounded-full p-1 shadow-sm"><Target className="w-4 h-4" /></div>}
                     </div>
                   );
                 })}
               </div>
 
-              {/* Add Subtask Button */}
-              <button
-                onClick={() => setIsAddSubtaskModalOpen(true)}
-                className="w-full py-3 mt-4 border-2 border-dashed border-white/20 rounded-xl hover:bg-white/10 text-white/70 flex items-center justify-center gap-2 transition-colors font-medium"
-              >
+              <button onClick={() => setIsAddSubtaskModalOpen(true)} className="w-full py-3 mt-4 border-2 border-dashed border-white/20 rounded-xl hover:bg-white/10 text-white/70 flex items-center justify-center gap-2 transition-colors font-medium">
                 <Plus className="w-5 h-5" /> Add Subtask
               </button>
             </div>
@@ -659,82 +576,47 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Global App Timer */}
-      <AppSessionTimer onUpdate={(time) => currentSessionDuration.current = time} />
+      <AppSessionTimer onUpdate={handleAppTimerUpdate} />
 
       {/* Settings Modal */}
       <Modal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} title="Settings">
         <div className="space-y-6 text-gray-800">
-           
-           {/* Timer Settings */}
            <div>
              <h3 className="text-gray-400 uppercase text-xs font-bold tracking-wider mb-3">Timer (minutes)</h3>
              <div className="grid grid-cols-3 gap-4">
                <div>
                  <label className="block text-sm text-gray-500 mb-1">Pomodoro</label>
-                 <input 
-                   type="number" 
-                   value={settings.durations.pomodoro}
-                   onChange={(e) => setSettings({...settings, durations: {...settings.durations, pomodoro: parseInt(e.target.value) || 25}})}
-                   className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800"
-                 />
+                 <input type="number" value={settings.durations.pomodoro} onChange={(e) => setSettings({...settings, durations: {...settings.durations, pomodoro: parseInt(e.target.value) || 25}})} className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800" />
                </div>
                <div>
                  <label className="block text-sm text-gray-500 mb-1">Short Break</label>
-                 <input 
-                   type="number" 
-                   value={settings.durations.shortBreak}
-                   onChange={(e) => setSettings({...settings, durations: {...settings.durations, shortBreak: parseInt(e.target.value) || 5}})}
-                   className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800"
-                 />
+                 <input type="number" value={settings.durations.shortBreak} onChange={(e) => setSettings({...settings, durations: {...settings.durations, shortBreak: parseInt(e.target.value) || 5}})} className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800" />
                </div>
                <div>
                  <label className="block text-sm text-gray-500 mb-1">Long Break</label>
-                 <input 
-                   type="number" 
-                   value={settings.durations.longBreak}
-                   onChange={(e) => setSettings({...settings, durations: {...settings.durations, longBreak: parseInt(e.target.value) || 15}})}
-                   className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800"
-                 />
+                 <input type="number" value={settings.durations.longBreak} onChange={(e) => setSettings({...settings, durations: {...settings.durations, longBreak: parseInt(e.target.value) || 15}})} className="w-full bg-gray-100 border-none rounded px-3 py-2 text-gray-800" />
                </div>
              </div>
            </div>
 
-           {/* Theme Settings */}
            <div>
              <h3 className="text-gray-400 uppercase text-xs font-bold tracking-wider mb-3">Theme Colors</h3>
              <div className="grid grid-cols-3 gap-4">
                <div>
                  <label className="block text-sm text-gray-500 mb-1">Pomodoro</label>
-                 <input 
-                   type="color" 
-                   value={settings.colors.pomodoro}
-                   onChange={(e) => setSettings({...settings, colors: {...settings.colors, pomodoro: e.target.value}})}
-                   className="w-full h-10 rounded cursor-pointer border border-gray-200 p-1"
-                 />
+                 <input type="color" value={settings.colors.pomodoro} onChange={(e) => setSettings({...settings, colors: {...settings.colors, pomodoro: e.target.value}})} className="w-full h-10 rounded cursor-pointer border border-gray-200 p-1" />
                </div>
                <div>
                  <label className="block text-sm text-gray-500 mb-1">Short Break</label>
-                 <input 
-                   type="color" 
-                   value={settings.colors.shortBreak}
-                   onChange={(e) => setSettings({...settings, colors: {...settings.colors, shortBreak: e.target.value}})}
-                   className="w-full h-10 rounded cursor-pointer border border-gray-200 p-1"
-                 />
+                 <input type="color" value={settings.colors.shortBreak} onChange={(e) => setSettings({...settings, colors: {...settings.colors, shortBreak: e.target.value}})} className="w-full h-10 rounded cursor-pointer border border-gray-200 p-1" />
                </div>
                <div>
                  <label className="block text-sm text-gray-500 mb-1">Long Break</label>
-                 <input 
-                   type="color" 
-                   value={settings.colors.longBreak}
-                   onChange={(e) => setSettings({...settings, colors: {...settings.colors, longBreak: e.target.value}})}
-                   className="w-full h-10 rounded cursor-pointer border border-gray-200 p-1"
-                 />
+                 <input type="color" value={settings.colors.longBreak} onChange={(e) => setSettings({...settings, colors: {...settings.colors, longBreak: e.target.value}})} className="w-full h-10 rounded cursor-pointer border border-gray-200 p-1" />
                </div>
              </div>
            </div>
 
-           {/* Toggles */}
            <div>
               <h3 className="text-gray-400 uppercase text-xs font-bold tracking-wider mb-3">Preferences</h3>
               <div className="space-y-3">
@@ -761,118 +643,50 @@ const App: React.FC = () => {
         </div>
       </Modal>
 
-      {/* Add Project Modal */}
       <Modal isOpen={isAddProjectModalOpen} onClose={() => setIsAddProjectModalOpen(false)} title="Create New Project">
         <div className="space-y-4 text-gray-800">
            <div>
              <label className="block text-sm font-medium mb-1">Project Name</label>
-             <input 
-               type="text"
-               value={newProjectName}
-               onChange={(e) => setNewProjectName(e.target.value)}
-               placeholder="e.g. Learn React"
-               className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 focus:outline-none"
-             />
+             <input type="text" value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="e.g. Learn React" className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 focus:outline-none" />
            </div>
-           
            <div>
              <label className="block text-sm font-medium mb-1">Subtasks</label>
              <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                {newSubtasks.map((st, idx) => (
                  <div key={idx} className="flex gap-2">
-                   <input 
-                     type="text"
-                     value={st.name}
-                     onChange={(e) => {
-                       const copy = [...newSubtasks];
-                       copy[idx].name = e.target.value;
-                       setNewSubtasks(copy);
-                     }}
-                     placeholder="Task name"
-                     className="flex-1 border rounded px-3 py-2 text-sm"
-                   />
-                   <input 
-                     type="number"
-                     min="1"
-                     value={st.target}
-                     onChange={(e) => {
-                       const copy = [...newSubtasks];
-                       copy[idx].target = parseInt(e.target.value) || 1;
-                       setNewSubtasks(copy);
-                     }}
-                     className="w-16 border rounded px-2 py-2 text-sm text-center"
-                   />
-                   {newSubtasks.length > 1 && (
-                     <button
-                       onClick={() => {
-                         setNewSubtasks(newSubtasks.filter((_, i) => i !== idx));
-                       }}
-                       className="p-2 text-gray-400 hover:text-red-500"
-                     >
-                       <Trash2 className="w-4 h-4" />
-                     </button>
-                   )}
+                   <input type="text" value={st.name} onChange={(e) => { const copy = [...newSubtasks]; copy[idx].name = e.target.value; setNewSubtasks(copy); }} placeholder="Task name" className="flex-1 border rounded px-3 py-2 text-sm" />
+                   <input type="number" min="1" value={st.target} onChange={(e) => { const copy = [...newSubtasks]; copy[idx].target = parseInt(e.target.value) || 1; setNewSubtasks(copy); }} className="w-16 border rounded px-2 py-2 text-sm text-center" />
+                   {newSubtasks.length > 1 && <button onClick={() => { setNewSubtasks(newSubtasks.filter((_, i) => i !== idx)); }} className="p-2 text-gray-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>}
                  </div>
                ))}
              </div>
-             <button 
-               onClick={() => setNewSubtasks([...newSubtasks, {name: '', target: 1}])}
-               className="text-sm text-rose-500 hover:text-rose-700 font-medium mt-2 flex items-center gap-1"
-             >
-               <Plus className="w-4 h-4" /> Add Subtask
-             </button>
+             <button onClick={() => setNewSubtasks([...newSubtasks, {name: '', target: 1}])} className="text-sm text-rose-500 hover:text-rose-700 font-medium mt-2 flex items-center gap-1"><Plus className="w-4 h-4" /> Add Subtask</button>
            </div>
-
-           <div className="flex justify-end pt-4">
-             <Button variant="secondary" onClick={() => setIsAddProjectModalOpen(false)} className="mr-2">Cancel</Button>
-             <Button onClick={handleAddProject} className="bg-white text-black border border-gray-200 hover:bg-gray-50 shadow-sm">Save Project</Button>
-           </div>
+           <div className="flex justify-end pt-4"><Button variant="secondary" onClick={() => setIsAddProjectModalOpen(false)} className="mr-2">Cancel</Button><Button onClick={handleAddProject} className="bg-white text-black border border-gray-200 hover:bg-gray-50 shadow-sm">Save Project</Button></div>
         </div>
       </Modal>
 
-      {/* Add Subtask Modal */}
       <Modal isOpen={isAddSubtaskModalOpen} onClose={() => setIsAddSubtaskModalOpen(false)} title="Add Subtask">
         <div className="space-y-4 text-gray-800">
            <div>
              <label className="block text-sm font-medium mb-1">Subtask Name</label>
-             <input 
-               type="text"
-               value={subtaskToAddName}
-               onChange={(e) => setSubtaskToAddName(e.target.value)}
-               placeholder="e.g. Review Documentation"
-               className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 focus:outline-none"
-             />
+             <input type="text" value={subtaskToAddName} onChange={(e) => setSubtaskToAddName(e.target.value)} placeholder="e.g. Review Documentation" className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 focus:outline-none" />
            </div>
-           
            <div>
              <label className="block text-sm font-medium mb-1">Target Sessions</label>
-             <input 
-               type="number"
-               min="1"
-               value={subtaskToAddTarget}
-               onChange={(e) => setSubtaskToAddTarget(parseInt(e.target.value) || 1)}
-               className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 focus:outline-none"
-             />
+             <input type="number" min="1" value={subtaskToAddTarget} onChange={(e) => setSubtaskToAddTarget(parseInt(e.target.value) || 1)} className="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-rose-500 focus:outline-none" />
            </div>
-
-           <div className="flex justify-end pt-4">
-             <Button variant="secondary" onClick={() => setIsAddSubtaskModalOpen(false)} className="mr-2">Cancel</Button>
-             <Button onClick={handleAddSubtask} className="bg-white text-black border border-gray-200 hover:bg-gray-50 shadow-sm">Add Subtask</Button>
-           </div>
+           <div className="flex justify-end pt-4"><Button variant="secondary" onClick={() => setIsAddSubtaskModalOpen(false)} className="mr-2">Cancel</Button><Button onClick={handleAddSubtask} className="bg-white text-black border border-gray-200 hover:bg-gray-50 shadow-sm">Add Subtask</Button></div>
         </div>
       </Modal>
 
-      {/* Performance Graph Modal */}
       <Modal isOpen={isPerformanceModalOpen} onClose={() => setIsPerformanceModalOpen(false)} title="Performance History">
         <div className="text-gray-800">
           <p className="text-sm text-gray-500 mb-4">Daily app usage based on imported history.</p>
           <PerformanceGraph data={appHistory} />
-          <div className="mt-4 flex justify-end">
-            <Button variant="secondary" onClick={() => setIsPerformanceModalOpen(false)}>Close</Button>
-          </div>
+          <div className="mt-4 flex justify-end"><Button variant="secondary" onClick={() => setIsPerformanceModalOpen(false)}>Close</Button></div>
         </div>
       </Modal>
-
     </div>
   );
 };
