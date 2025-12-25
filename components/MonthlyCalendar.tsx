@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { AppSessionLog, Project, AppSettings } from '../types';
-import { ChevronLeft, ChevronRight, X, CheckCircle, Target, FileText, Clock, Edit3, Eye } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, CheckCircle, Target, FileText, Clock, Edit3, Eye, Check } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -26,13 +26,13 @@ const HOURS = Array.from({ length: 16 }, (_, i) => `${(i + 8).toString().padStar
 // Helper component for rendering Markdown securely
 const Markdown: React.FC<{ content: string, className?: string }> = ({ content, className = "" }) => {
   const html = useMemo(() => {
-    const rawHtml = marked.parse(content || '') as string;
+    const rawHtml = marked.parse(content || '', { breaks: true }) as string;
     return DOMPurify.sanitize(rawHtml);
   }, [content]);
 
   return (
     <div 
-      className={`prose max-w-none ${className}`} 
+      className={`prose max-w-none prose-invert ${className}`} 
       dangerouslySetInnerHTML={{ __html: html }} 
     />
   );
@@ -49,7 +49,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
 }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isEditingNote, setIsEditingNote] = useState(false);
 
   const today = useMemo(() => new Date(), []);
 
@@ -137,6 +137,11 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
     });
   }, [selectedDay, currentDate, projects]);
 
+  const toggleDay = (day: number) => {
+    setSelectedDay(day);
+    setIsEditingNote(false); // Reset to preview mode when switching days
+  }
+
   return (
     <div className="w-full relative">
       <div className="flex items-center justify-between mb-8">
@@ -172,7 +177,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
           return (
             <div 
               key={day} 
-              onClick={() => setSelectedDay(day)}
+              onClick={() => toggleDay(day)}
               className={`h-28 rounded-2xl p-2 relative group cursor-pointer transition-all border
                 ${isToday ? 'bg-white/10 border-white ring-2 ring-white/20 shadow-[0_0_20px_rgba(255,255,255,0.1)]' : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20'}
                 ${selectedDay === day ? 'ring-2 ring-yellow-400 border-yellow-400' : ''}`}
@@ -234,8 +239,8 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
                     </div>
                     <div className="max-h-60 overflow-y-auto pr-2 space-y-2 scrollbar-thin scrollbar-thumb-white/10">
                        {HOURS.map(hour => (
-                         <div key={hour} className="flex items-center gap-3">
-                            <span className="text-[10px] font-mono opacity-40 w-10">{hour}</span>
+                         <div key={hour} className="flex items-center gap-3 group/hour">
+                            <span className="text-[10px] font-mono opacity-40 w-10 shrink-0">{hour}</span>
                             <input 
                               type="text"
                               value={dayAgendas[selectedDayKey]?.[hour] || ''}
@@ -248,31 +253,43 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
                     </div>
                  </div>
 
-                 {/* General Notes Section */}
+                 {/* General Notes Section with Click Pen to Edit */}
                  <div>
                     <div className="flex items-center justify-between gap-2 mb-3">
                       <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold">
-                        <FileText className="w-3 h-3" /> Day Description (Markdown)
+                        <FileText className="w-3 h-3" /> General Notes
                       </div>
                       <button 
-                        onClick={() => setIsPreviewMode(!isPreviewMode)}
-                        className="flex items-center gap-1.5 text-[10px] bg-white/10 px-2 py-1 rounded hover:bg-white/20 transition-colors uppercase font-bold tracking-wider"
+                        onClick={() => setIsEditingNote(!isEditingNote)}
+                        className="flex items-center gap-1.5 text-[10px] bg-white/10 px-2.5 py-1 rounded-lg hover:bg-white/20 transition-colors uppercase font-bold tracking-wider text-white/70"
+                        title={isEditingNote ? "Save/Preview" : "Edit Notes"}
                       >
-                        {isPreviewMode ? <><Edit3 className="w-3 h-3" /> Edit</> : <><Eye className="w-3 h-3" /> Preview</>}
+                        {isEditingNote ? <><Check className="w-3.5 h-3.5 text-emerald-400" /> Done</> : <><Edit3 className="w-3.5 h-3.5" /> Edit</>}
                       </button>
                     </div>
-                    {isPreviewMode ? (
-                      <div className="w-full bg-white/5 border border-white/5 rounded-2xl p-4 min-h-[140px] max-h-[250px] overflow-y-auto">
-                        <Markdown content={dayNotes[selectedDayKey] || ''} className="text-sm opacity-90" />
-                        {!(dayNotes[selectedDayKey]?.trim()) && <div className="text-white/20 italic text-xs">Empty note...</div>}
-                      </div>
-                    ) : (
+                    
+                    {isEditingNote ? (
                       <textarea
+                        autoFocus
                         value={dayNotes[selectedDayKey] || ''}
                         onChange={(e) => onUpdateDayNote(selectedDayKey, e.target.value)}
-                        placeholder="Supports Markdown: - lists, *bold*, etc..."
-                        className="w-full bg-white/5 border border-white/5 rounded-2xl p-4 text-xs min-h-[140px] outline-none focus:ring-1 focus:ring-white/20 transition-all placeholder:text-white/10 leading-relaxed resize-none"
+                        placeholder="Type notes here... (Supports Markdown)"
+                        className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm min-h-[160px] outline-none focus:ring-1 focus:ring-white/20 transition-all placeholder:text-white/10 leading-relaxed resize-none scrollbar-thin"
                       />
+                    ) : (
+                      <div 
+                        onClick={() => setIsEditingNote(true)}
+                        className="w-full bg-white/5 border border-white/5 rounded-2xl p-4 min-h-[160px] max-h-[280px] overflow-y-auto cursor-text hover:bg-white/[0.07] transition-colors group"
+                      >
+                        {dayNotes[selectedDayKey]?.trim() ? (
+                          <Markdown content={dayNotes[selectedDayKey]} className="text-sm opacity-90" />
+                        ) : (
+                          <div className="h-full flex flex-col items-center justify-center text-white/20 py-10">
+                            <Edit3 className="w-8 h-8 mb-2 opacity-20 group-hover:opacity-40 transition-opacity" />
+                            <p className="text-xs italic">Click to add general notes...</p>
+                          </div>
+                        )}
+                      </div>
                     )}
                  </div>
 
@@ -298,7 +315,7 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
               </div>
 
               <div className="mt-8 pt-4 border-t border-white/5 text-[10px] text-white/20 flex justify-between items-center italic">
-                 <span>Auto-saves. Markdown lists supported.</span>
+                 <span>Rich Markdown supported</span>
                  <span>Target: {settings.dailyPomodoroTarget} Sessions</span>
               </div>
            </div>
