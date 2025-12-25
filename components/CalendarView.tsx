@@ -12,6 +12,7 @@ interface CalendarViewProps {
   settings: AppSettings;
   activeProjectId: string | null;
   onProjectSelect: (id: string) => void;
+  onActivateProject: (id: string) => void;
   dayNotes: Record<string, string>;
   onUpdateDayNote: (date: string, note: string) => void;
   dayAgendas: Record<string, Record<string, string>>;
@@ -26,6 +27,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   settings, 
   activeProjectId, 
   onProjectSelect, 
+  onActivateProject,
   dayNotes, 
   onUpdateDayNote,
   dayAgendas,
@@ -76,7 +78,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             onUpdateDayNote={onUpdateDayNote}
             dayAgendas={dayAgendas}
             onUpdateDayAgenda={onUpdateDayAgenda}
-            onActivateProject={onProjectSelect}
+            onActivateProject={onActivateProject}
           />
         )}
         {activeTab === 'matrix' && <EisenhowerMatrix projects={projects} activeProjectId={activeProjectId} onProjectSelect={onProjectSelect} />}

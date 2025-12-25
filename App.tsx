@@ -410,7 +410,8 @@ const App: React.FC = () => {
                 projects={projects} 
                 settings={settings} 
                 activeProjectId={selectedProjectId} 
-                onProjectSelect={handleActivateProject}
+                onProjectSelect={setSelectedProjectId}
+                onActivateProject={handleActivateProject}
                 dayNotes={dayNotes}
                 onUpdateDayNote={(date, note) => setDayNotes(prev => ({...prev, [date]: note}))}
                 dayAgendas={dayAgendas}
