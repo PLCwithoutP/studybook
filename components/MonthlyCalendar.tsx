@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { AppSessionLog, Project, AppSettings } from '../types';
-import { ChevronLeft, ChevronRight, X, CheckCircle, Target, FileText, Clock, Edit3, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, CheckCircle, Target, FileText, Clock, Edit3, Check, Repeat, XCircle } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { getDailyProjectCompletion } from '../utils';
 
 interface MonthlyCalendarProps {
   history: AppSessionLog[];
@@ -39,6 +40,14 @@ const Markdown: React.FC<{ content: string, className?: string }> = ({ content, 
   );
 };
 
+interface CalendarDot {
+  id: string;
+  name: string;
+  color: string;
+  isDaily: boolean;
+  status?: 'success' | 'failed' | 'pending';
+}
+
 export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({ 
   history, 
   projects, 
@@ -53,7 +62,11 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
-  const today = useMemo(() => new Date(), []);
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0,0,0,0);
+    return d;
+  }, []);
 
   const projectColorMap = useMemo(() => {
     const map: { [id: string]: string } = {};
@@ -86,28 +99,66 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
   }, [history]);
 
   const projectsByDay = useMemo(() => {
-    const spans: { [date: string]: { id: string, name: string, color: string }[] } = {};
+    const spans: { [date: string]: CalendarDot[] } = {};
     const dailyTarget = settings.dailyPomodoroTarget || 6;
 
     projects.forEach(p => {
       const start = new Date(p.createdAt);
       start.setHours(0, 0, 0, 0);
-      
-      let totalPoms = p.subtasks.reduce((sum, s) => sum + s.targetSessions, 0);
-      if (totalPoms <= 0) totalPoms = 1;
 
-      const durationDays = Math.ceil(totalPoms / dailyTarget);
-      
-      for (let i = 0; i < durationDays; i++) {
-        const d = new Date(start);
-        d.setDate(start.getDate() + i);
-        const dateKey = d.toDateString();
-        if (!spans[dateKey]) spans[dateKey] = [];
-        spans[dateKey].push({ id: p.id, name: p.name, color: projectColorMap[p.id] });
+      if (p.isDaily && p.recurrenceEndDate) {
+        // Daily Recurring Logic
+        const end = new Date(p.recurrenceEndDate);
+        end.setHours(0,0,0,0);
+        
+        let loopDate = new Date(start);
+        while (loopDate <= end) {
+          const dateKey = loopDate.toDateString();
+          if (!spans[dateKey]) spans[dateKey] = [];
+          
+          // Determine status for past/today
+          let status: 'success' | 'failed' | 'pending' = 'pending';
+          // Check if this date is in the past or today
+          if (loopDate <= today) {
+             const dateStr = loopDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+             const done = getDailyProjectCompletion(p.id, dateStr, history);
+             const target = p.subtasks.reduce((sum, t) => sum + t.targetSessions, 0);
+             if (done >= target) status = 'success';
+             else if (loopDate.getTime() < today.getTime()) status = 'failed';
+          }
+
+          spans[dateKey].push({ 
+            id: p.id, 
+            name: p.name, 
+            color: projectColorMap[p.id],
+            isDaily: true,
+            status
+          });
+          loopDate.setDate(loopDate.getDate() + 1);
+        }
+
+      } else {
+        // Standard Estimate Logic
+        let totalPoms = p.subtasks.reduce((sum, s) => sum + s.targetSessions, 0);
+        if (totalPoms <= 0) totalPoms = 1;
+        const durationDays = Math.ceil(totalPoms / dailyTarget);
+        
+        for (let i = 0; i < durationDays; i++) {
+          const d = new Date(start);
+          d.setDate(start.getDate() + i);
+          const dateKey = d.toDateString();
+          if (!spans[dateKey]) spans[dateKey] = [];
+          spans[dateKey].push({ 
+            id: p.id, 
+            name: p.name, 
+            color: projectColorMap[p.id],
+            isDaily: false 
+          });
+        }
       }
     });
     return spans;
-  }, [projects, settings.dailyPomodoroTarget, projectColorMap]);
+  }, [projects, settings.dailyPomodoroTarget, projectColorMap, history, today]);
 
   const changeMonth = (offset: number) => {
     setSelectedDay(null);
@@ -200,9 +251,14 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
                 {dots.map((dot, dIdx) => (
                   <div 
                     key={`${dot.id}-${dIdx}`} 
-                    className="w-1.5 h-1.5 rounded-full shadow-sm"
-                    style={{ backgroundColor: dot.color }}
-                  />
+                    className={`w-1.5 h-1.5 rounded-full shadow-sm ${dot.status === 'failed' ? 'bg-red-500 rounded-none w-2 h-2' : ''}`}
+                    style={{ backgroundColor: dot.status === 'failed' ? undefined : dot.color }}
+                  >
+                     {/* Failed Indicator Visual */}
+                     {dot.status === 'failed' && (
+                       <div className="w-full h-full bg-red-500 rotate-45" /> 
+                     )}
+                  </div>
                 ))}
               </div>
 
@@ -319,9 +375,12 @@ export const MonthlyCalendar: React.FC<MonthlyCalendarProps> = ({
                              onClick={() => onActivateProject(p.id)}
                              className="bg-white/5 p-3 rounded-2xl border border-white/5 flex items-center gap-3 hover:bg-white/10 hover:border-white/20 transition-all cursor-pointer group"
                            >
-                               <div className="w-1.5 h-6 rounded-full" style={{ backgroundColor: p.color }} />
-                               <div className="text-xs font-bold truncate flex-1 group-hover:text-white text-white/80">{p.name}</div>
-                               <CheckCircle className="w-4 h-4 text-white/10 group-hover:text-white/40 transition-colors" />
+                               <div className="w-1.5 h-6 rounded-full" style={{ backgroundColor: p.status === 'failed' ? '#ef4444' : p.color }} />
+                               <div className="flex-1 overflow-hidden">
+                                  <div className={`text-xs font-bold truncate group-hover:text-white ${p.status === 'failed' ? 'text-red-400' : 'text-white/80'}`}>{p.name}</div>
+                                  {p.isDaily && <div className="text-[9px] uppercase tracking-wider opacity-50 flex items-center gap-1"><Repeat className="w-2 h-2" /> Daily</div>}
+                               </div>
+                               {p.status === 'failed' ? <XCircle className="w-4 h-4 text-red-500" /> : <CheckCircle className="w-4 h-4 text-white/10 group-hover:text-white/40 transition-colors" />}
                            </div>
                          ))}
                        </div>

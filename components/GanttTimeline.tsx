@@ -19,6 +19,8 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(new Set());
   const dailyTarget = settings.dailyPomodoroTarget || 6;
 
+  const visibleProjects = useMemo(() => projects.filter(p => !p.isDaily), [projects]);
+
   const toggleProject = (id: string) => {
     const newSet = new Set(expandedProjectIds);
     if (newSet.has(id)) newSet.delete(id);
@@ -27,13 +29,13 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
   };
 
   const timelineRange = useMemo(() => {
-    if (projects.length === 0) return { start: new Date(), end: new Date(), days: [] };
+    if (visibleProjects.length === 0) return { start: new Date(), end: new Date(), days: [] };
     
-    const startDates = projects.map(p => new Date(p.createdAt).getTime());
+    const startDates = visibleProjects.map(p => new Date(p.createdAt).getTime());
     const minStart = new Date(Math.min(...startDates));
     minStart.setHours(0, 0, 0, 0);
 
-    const endDates = projects.map(p => {
+    const endDates = visibleProjects.map(p => {
       const totalPoms = p.subtasks.reduce((sum, s) => sum + s.targetSessions, 0);
       const durationDays = Math.ceil(totalPoms / dailyTarget);
       const end = new Date(p.createdAt);
@@ -54,18 +56,18 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
     }
 
     return { start: minStart, end: maxEnd, days };
-  }, [projects, dailyTarget]);
+  }, [visibleProjects, dailyTarget]);
 
   const exportToStyledSpreadsheet = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const COLORS = {
-      NAVY: "1E293B",  // Replaced Black with Navy for "Definition" fields visibility
+      NAVY: "1E293B",
       WHITE: "FFFFFF",
-      GREEN: "4ADE80", // OK
-      RED: "F87171",   // INCOMPLETE
-      YELLOW: "FACC15", // FUTURE
+      GREEN: "4ADE80",
+      RED: "F87171",
+      YELLOW: "FACC15",
       GREY_LIGHT: "F3F4F6",
       GREY_BORDER: "E2E8F0",
       INDIGO: "818CF8",
@@ -74,7 +76,7 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
 
     const data: any[] = [];
     
-    // 1. LEGEND WITH HIGH CONTRAST COLORS
+    // 1. LEGEND
     data.push([{ v: "GANTT CHART LEGEND", s: { font: { bold: true, size: 14 } } }]);
     data.push([{ v: "NOW", s: { fill: { fgColor: { rgb: COLORS.NAVY } }, font: { color: { rgb: COLORS.WHITE }, bold: true }, alignment: { horizontal: "center" } } }, { v: "Current Day (Today)" }]);
     data.push([{ v: "OK", s: { fill: { fgColor: { rgb: COLORS.GREEN } }, alignment: { horizontal: "center" } } }, { v: "Completed Work on Schedule" }]);
@@ -82,7 +84,7 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
     data.push([{ v: "...", s: { fill: { fgColor: { rgb: COLORS.YELLOW } }, alignment: { horizontal: "center" } } }, { v: "Future Scheduled Work" }]);
     data.push([]); // Spacer
 
-    // 2. HEADER ROW (Dates)
+    // 2. HEADER
     const headerRow: any[] = [
       { v: "Project / Subtask", s: { font: { bold: true, color: { rgb: COLORS.WHITE } }, fill: { fgColor: { rgb: COLORS.NAVY } } } },
       { v: "Importance", s: { font: { bold: true, color: { rgb: COLORS.WHITE } }, fill: { fgColor: { rgb: COLORS.NAVY } } } },
@@ -102,8 +104,8 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
     });
     data.push(headerRow);
 
-    // 3. PROJECT ROWS
-    projects.forEach(project => {
+    // 3. ROWS
+    visibleProjects.forEach(project => {
       const projectStart = new Date(project.createdAt);
       projectStart.setHours(0, 0, 0, 0);
       const totalTarget = project.subtasks.reduce((sum, s) => sum + s.targetSessions, 0);
@@ -203,10 +205,11 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
     }
   };
 
-  if (projects.length === 0) {
+  if (visibleProjects.length === 0) {
     return (
       <div className="h-64 flex flex-col items-center justify-center text-white/40 border-2 border-dashed border-white/10 rounded-3xl animate-fade-in">
-        <p>No projects to display in timeline.</p>
+        <p>No standard projects to display in timeline.</p>
+        <p className="text-xs opacity-50 mt-1">Daily projects are hidden.</p>
       </div>
     );
   }
@@ -244,7 +247,7 @@ export const GanttTimeline: React.FC<GanttTimelineProps> = ({ projects, settings
                 }}
               />
 
-              {projects.map((project, pIdx) => {
+              {visibleProjects.map((project, pIdx) => {
                 const startIdx = timelineRange.days.findIndex(d => d.toDateString() === new Date(project.createdAt).toDateString());
                 const totalPoms = project.subtasks.reduce((sum, s) => sum + s.targetSessions, 0);
                 const durationDays = Math.ceil(totalPoms / dailyTarget);

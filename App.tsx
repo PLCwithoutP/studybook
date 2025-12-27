@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AppData, Project, TimerMode, AppSessionLog, AppSettings, Importance, Urgency, Subtask } from './types';
-import { getIstanbulDate, generateId, calculateProjectStats, formatTime } from './utils';
+import { getIstanbulDate, generateId, calculateProjectStats, formatTime, getDailyProjectCompletion } from './utils';
 import { Button } from './components/Button';
 import { Modal } from './components/Modal';
 import { AppSessionTimer } from './components/AppSessionTimer';
 import { PerformanceGraph } from './components/PerformanceGraph';
 import { CalendarView } from './components/CalendarView';
-import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trash2, Plus, Minus, SkipForward, Menu, Download, Upload, Book, Settings, Target, BarChart3, ArrowLeft, RotateCcw, Calendar as CalendarIcon, Edit2, ChevronDown, ChevronUp, Repeat } from 'lucide-react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -57,6 +57,7 @@ const App: React.FC = () => {
   const [pomoCount, setPomoCount] = useState(0); 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
+  const [isEditProjectModalOpen, setIsEditProjectModalOpen] = useState(false);
   const [isAddSubtaskModalOpen, setIsAddSubtaskModalOpen] = useState(false);
   const [isEditSubtaskModalOpen, setIsEditSubtaskModalOpen] = useState(false);
   const [isPerformanceViewOpen, setIsPerformanceViewOpen] = useState(false);
@@ -65,9 +66,19 @@ const App: React.FC = () => {
   
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
+  const [newProjectIsDaily, setNewProjectIsDaily] = useState(false);
+  const [newProjectRecurrenceEnd, setNewProjectRecurrenceEnd] = useState('');
   const [newSubtasks, setNewSubtasks] = useState<{name: string, description: string, target: number, importance: Importance | '', urgency: Urgency | ''}[]>([
     {name: '', description: '', target: 1, importance: '', urgency: ''}
   ]);
+
+  const [editProjectData, setEditProjectData] = useState({ 
+    id: '', 
+    name: '', 
+    description: '', 
+    isDaily: false, 
+    recurrenceEndDate: '' 
+  });
   
   const [editingSubtask, setEditingSubtask] = useState<Subtask | null>(null);
   const [subtaskForm, setSubtaskForm] = useState({
@@ -114,7 +125,20 @@ const App: React.FC = () => {
     if (timerMode === TimerMode.POMODORO) {
       const nextPomoCount = pomoCount + 1;
       setPomoCount(nextPomoCount);
+      
+      // Update persistent history
+      const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+      const newLog: AppSessionLog = {
+        date: todayStr,
+        duration: formatTime(settings.durations.pomodoro * 60),
+        projectId: selectedProjectId || undefined,
+        subtaskId: activeSubtaskId || undefined
+      };
+      setAppHistory(prev => [...prev, newLog]);
+
+      // Update project counters
       if (activeSubtaskId && selectedProjectId) updateSubtaskProgress(selectedProjectId, activeSubtaskId);
+      
       let nextMode = nextPomoCount % 4 === 0 ? TimerMode.LONG_BREAK : TimerMode.SHORT_BREAK;
       let nextTime = nextMode === TimerMode.LONG_BREAK ? settings.durations.longBreak * 60 : settings.durations.shortBreak * 60;
       setTimerMode(nextMode);
@@ -150,6 +174,11 @@ const App: React.FC = () => {
   const handleAddProject = () => {
     if (!newProjectName.trim()) return;
     
+    if (newProjectIsDaily && !newProjectRecurrenceEnd) {
+      alert("Please select a recurrence end date for daily projects.");
+      return;
+    }
+
     // Validate all subtasks have importance and urgency
     const hasInvalidSubtasks = newSubtasks.some(st => st.name.trim() !== '' && (st.importance === '' || st.urgency === ''));
     if (hasInvalidSubtasks) {
@@ -162,6 +191,8 @@ const App: React.FC = () => {
       name: newProjectName,
       description: newProjectDesc,
       createdAt: new Date().toISOString(),
+      isDaily: newProjectIsDaily,
+      recurrenceEndDate: newProjectIsDaily ? newProjectRecurrenceEnd : undefined,
       subtasks: newSubtasks.filter(st => st.name.trim() !== '').map(st => ({
         id: generateId(), 
         name: st.name, 
@@ -175,9 +206,39 @@ const App: React.FC = () => {
     setProjects(prev => [...prev, newProject]);
     setNewProjectName('');
     setNewProjectDesc('');
+    setNewProjectIsDaily(false);
+    setNewProjectRecurrenceEnd('');
     setNewSubtasks([{name: '', description: '', target: 1, importance: '', urgency: ''}]);
     setIsAddProjectModalOpen(false);
     if (!selectedProjectId) setSelectedProjectId(newProject.id);
+  };
+
+  const openEditProjectModal = (project: Project) => {
+    setEditProjectData({
+        id: project.id,
+        name: project.name,
+        description: project.description || '',
+        isDaily: project.isDaily || false,
+        recurrenceEndDate: project.recurrenceEndDate || ''
+    });
+    setIsEditProjectModalOpen(true);
+  };
+
+  const handleUpdateProject = () => {
+    if (!editProjectData.name.trim()) return;
+    if (editProjectData.isDaily && !editProjectData.recurrenceEndDate) {
+        alert("Please select a recurrence end date for daily projects.");
+        return;
+    }
+
+    setProjects(prev => prev.map(p => p.id !== editProjectData.id ? p : {
+        ...p,
+        name: editProjectData.name,
+        description: editProjectData.description,
+        isDaily: editProjectData.isDaily,
+        recurrenceEndDate: editProjectData.isDaily ? editProjectData.recurrenceEndDate : undefined
+    }));
+    setIsEditProjectModalOpen(false);
   };
 
   const handleActivateProject = (id: string) => {
@@ -278,7 +339,7 @@ const App: React.FC = () => {
     const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
     const dataToExport: AppData = { 
       projects, 
-      appHistory: [...appHistory, { date: todayStr, duration: currentSessionDuration.current }], 
+      appHistory: [...appHistory], 
       dayNotes,
       dayAgendas,
       settings 
@@ -313,7 +374,24 @@ const App: React.FC = () => {
 
   const activeColor = timerMode === TimerMode.POMODORO ? settings.colors.pomodoro : (timerMode === TimerMode.SHORT_BREAK ? settings.colors.shortBreak : settings.colors.longBreak);
   const selectedProject = projects.find(p => p.id === selectedProjectId);
-  const selectedProjectStats = selectedProject ? calculateProjectStats(selectedProject.subtasks) : null;
+  
+  // Calculate stats for selected project - handle daily project logic
+  const selectedProjectStats = useMemo(() => {
+    if (!selectedProject) return null;
+    if (selectedProject.isDaily) {
+      const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+      const dailyDone = getDailyProjectCompletion(selectedProject.id, todayStr, appHistory);
+      const dailyTarget = selectedProject.subtasks.reduce((sum, t) => sum + t.targetSessions, 0);
+      return {
+        totalSessions: dailyTarget,
+        completedSessions: dailyDone,
+        timeSpent: formatTime(dailyDone * 25 * 60),
+        timeRemaining: formatTime(Math.max(0, dailyTarget - dailyDone) * 25 * 60)
+      };
+    }
+    return calculateProjectStats(selectedProject.subtasks);
+  }, [selectedProject, appHistory]);
+
   const activeSubtask = selectedProject?.subtasks.find(t => t.id === activeSubtaskId);
   const totalDuration = timerMode === TimerMode.POMODORO ? settings.durations.pomodoro * 60 : (timerMode === TimerMode.SHORT_BREAK ? settings.durations.shortBreak * 60 : settings.durations.longBreak * 60);
   const progressPercentage = Math.min(100, Math.max(0, (timeLeft / totalDuration) * 100));
@@ -356,12 +434,25 @@ const App: React.FC = () => {
           </div>
           <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-white/30">
             {projects.map(project => {
-              const stats = calculateProjectStats(project.subtasks);
+              // Sidebar Stats: For daily projects, show TODAY'S stats
+              let stats;
+              if (project.isDaily) {
+                const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+                const dailyDone = getDailyProjectCompletion(project.id, todayStr, appHistory);
+                const dailyTarget = project.subtasks.reduce((sum, t) => sum + t.targetSessions, 0);
+                stats = { totalSessions: dailyTarget, completedSessions: dailyDone };
+              } else {
+                stats = calculateProjectStats(project.subtasks);
+              }
+
               return (
                 <div key={project.id} onClick={() => { setSelectedProjectId(project.id); setIsPerformanceViewOpen(false); setIsCalendarViewOpen(false); }} className={`p-4 rounded-lg cursor-pointer transition-all border ${selectedProjectId === project.id ? 'bg-white/20 border-white/40 shadow-lg' : 'bg-white/5 border-transparent hover:bg-white/10'}`}>
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold truncate">{project.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold truncate">{project.name}</h3>
+                        {project.isDaily && <Repeat className="w-3 h-3 text-yellow-300" />}
+                      </div>
                       {project.description && <p className="text-[10px] opacity-40 truncate">{project.description}</p>}
                     </div>
                     <button onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete project?")) { setProjects(prev => prev.filter(p => p.id !== project.id)); if (selectedProjectId === project.id) setSelectedProjectId(null); } }} className="text-white/50 hover:text-white p-1"><Trash2 className="w-4 h-4" /></button>
@@ -459,7 +550,11 @@ const App: React.FC = () => {
                 <div className="w-full max-w-[550px] animate-fade-in-up">
                   <div className="flex justify-between items-end mb-4 border-b border-white/30 pb-2">
                      <div>
-                       <h2 className="text-2xl font-bold">{selectedProject.name}</h2>
+                       <div className="flex items-center gap-2">
+                         <h2 className="text-2xl font-bold">{selectedProject.name}</h2>
+                         {selectedProject.isDaily && <div className="bg-yellow-400 text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1"><Repeat className="w-3 h-3" /> Daily</div>}
+                         <button onClick={() => openEditProjectModal(selectedProject)} className="ml-3 p-1.5 hover:bg-white/10 rounded-lg text-white/60 hover:text-white transition-colors" title="Edit Project"><Edit2 className="w-5 h-5" /></button>
+                       </div>
                        <div className="text-sm opacity-80 mt-1">Time Spent: {selectedProjectStats.timeSpent} <span className="mx-2">|</span> Est. Remaining: {selectedProjectStats.timeRemaining}</div>
                        {selectedProject.description && (
                          <div className="mt-2 p-3 bg-white/5 rounded-xl border border-white/10 shadow-sm overflow-hidden">
@@ -472,12 +567,23 @@ const App: React.FC = () => {
                   <div className="space-y-3">
                     {selectedProject.subtasks.map(task => {
                       const isExpanded = expandedSubtasks.has(task.id);
+                      // Visual adjustments for completed state for Daily projects - usually we don't cross them out unless done TODAY
+                      // But for simplicity, we rely on completedSessions which we update for daily projects differently?
+                      // Wait, we update `projects` state via `updateSubtaskProgress` which increments `completedSessions`.
+                      // For DAILY projects, `completedSessions` in the state accumulates forever.
+                      // We should ideally reset it or ignore it.
+                      // The Sidebar uses `stats` calculated from history.
+                      // The main view (here) uses `selectedProjectStats` which is also calculated from history for daily projects.
+                      // But `task.completedSessions` directly accessed below is the accumulated one.
+                      // Let's hide the direct use of `task.completedSessions` for strike-through if it's daily.
+                      const isDone = selectedProject.isDaily ? false : task.completedSessions >= task.targetSessions; // Daily tasks are never "fully done forever"
+
                       return (
-                        <div key={task.id} onClick={() => setActiveSubtaskId(task.id)} className={`relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110 ${task.completedSessions >= task.targetSessions ? 'bg-emerald-500/20 border-emerald-400' : 'bg-rose-500/10 border-rose-300' } ${activeSubtaskId === task.id ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}`}>
+                        <div key={task.id} onClick={() => setActiveSubtaskId(task.id)} className={`relative p-4 rounded-xl border-l-8 cursor-pointer transition-all hover:brightness-110 ${isDone ? 'bg-emerald-500/20 border-emerald-400' : 'bg-rose-500/10 border-rose-300' } ${activeSubtaskId === task.id ? 'ring-2 ring-white ring-offset-2 ring-offset-transparent transform scale-[1.02] shadow-xl' : ''}`}>
                           <div className="flex flex-col gap-2">
                               <div className="flex justify-between items-center">
                                 <div className="flex items-center gap-2 overflow-hidden flex-1">
-                                  <span className={`font-medium text-lg truncate ${task.completedSessions >= task.targetSessions ? 'line-through text-white/50 italic' : 'text-white'}`}>{task.name}</span>
+                                  <span className={`font-medium text-lg truncate ${isDone ? 'line-through text-white/50 italic' : 'text-white'}`}>{task.name}</span>
                                   {task.description && (
                                     <button 
                                       onClick={(e) => { e.stopPropagation(); toggleSubtaskExpand(task.id); }}
@@ -488,6 +594,7 @@ const App: React.FC = () => {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-4 shrink-0">
+                                    {/* For daily tasks, show accumulated or today? Standard behavior is just show raw numbers. */}
                                     <div className="font-mono text-lg font-bold">{task.completedSessions} <span className="opacity-50 text-sm">/ {task.targetSessions}</span></div>
                                     <div className="flex items-center gap-1 bg-black/20 rounded-lg p-1">
                                       <button onClick={(e) => { e.stopPropagation(); updateSessionTarget(selectedProject.id, task.id, -1); }} className="p-1 hover:bg-white/20 rounded transition-colors" disabled={task.targetSessions <= task.completedSessions || task.targetSessions <= 1}><Minus className="w-4 h-4" /></button>
@@ -526,6 +633,7 @@ const App: React.FC = () => {
 
       <AppSessionTimer onUpdate={handleAppTimerUpdate} />
 
+      {/* Settings Modal - Unchanged logic */}
       <Modal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} title="Settings">
         <div className="space-y-6 text-gray-800">
            <div>
@@ -567,6 +675,19 @@ const App: React.FC = () => {
       <Modal isOpen={isAddProjectModalOpen} onClose={() => setIsAddProjectModalOpen(false)} title="New Project">
         <div className="space-y-4 text-gray-800">
            <input type="text" style={fieldStyle} value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="Project Name" className={inputClass} />
+           
+           <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border">
+             <input type="checkbox" id="isDaily" checked={newProjectIsDaily} onChange={(e) => setNewProjectIsDaily(e.target.checked)} className="w-4 h-4" />
+             <label htmlFor="isDaily" className="text-sm font-medium flex-1 cursor-pointer flex items-center gap-2"><Repeat className="w-4 h-4 text-gray-500" /> Daily Recurring Project</label>
+           </div>
+           
+           {newProjectIsDaily && (
+             <div className="space-y-1 animate-fade-in">
+                <label className="text-[10px] font-bold text-gray-400 uppercase">Recurrence End Date</label>
+                <input type="date" style={fieldStyle} value={newProjectRecurrenceEnd} onChange={(e) => setNewProjectRecurrenceEnd(e.target.value)} className={inputClass} />
+             </div>
+           )}
+
            <div className="space-y-1">
              <label className="text-[10px] font-bold text-gray-400 uppercase">Project Itemized List (Markdown)</label>
              <textarea style={fieldStyle} value={newProjectDesc} onChange={(e) => setNewProjectDesc(e.target.value)} placeholder="- Item 1&#10;- Item 2..." className={textareaClass} />
@@ -602,7 +723,33 @@ const App: React.FC = () => {
         </div>
       </Modal>
 
+      <Modal isOpen={isEditProjectModalOpen} onClose={() => setIsEditProjectModalOpen(false)} title="Edit Project">
+        <div className="space-y-4 text-gray-800">
+           <input type="text" style={fieldStyle} value={editProjectData.name} onChange={(e) => setEditProjectData({...editProjectData, name: e.target.value})} placeholder="Project Name" className={inputClass} />
+           
+           <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg border">
+             <input type="checkbox" id="editIsDaily" checked={editProjectData.isDaily} onChange={(e) => setEditProjectData({...editProjectData, isDaily: e.target.checked})} className="w-4 h-4" />
+             <label htmlFor="editIsDaily" className="text-sm font-medium flex-1 cursor-pointer flex items-center gap-2"><Repeat className="w-4 h-4 text-gray-500" /> Daily Recurring Project</label>
+           </div>
+           
+           {editProjectData.isDaily && (
+             <div className="space-y-1 animate-fade-in">
+                <label className="text-[10px] font-bold text-gray-400 uppercase">Recurrence End Date</label>
+                <input type="date" style={fieldStyle} value={editProjectData.recurrenceEndDate} onChange={(e) => setEditProjectData({...editProjectData, recurrenceEndDate: e.target.value})} className={inputClass} />
+             </div>
+           )}
+
+           <div className="space-y-1">
+             <label className="text-[10px] font-bold text-gray-400 uppercase">Project Itemized List (Markdown)</label>
+             <textarea style={fieldStyle} value={editProjectData.description} onChange={(e) => setEditProjectData({...editProjectData, description: e.target.value})} placeholder="- Item 1..." className={textareaClass} />
+           </div>
+
+           <div className="flex justify-end pt-4"><Button onClick={handleUpdateProject}>Save Changes</Button></div>
+        </div>
+      </Modal>
+
       <Modal isOpen={isAddSubtaskModalOpen} onClose={() => { setIsAddSubtaskModalOpen(false); resetSubtaskForm(); }} title="Add Subtask">
+        {/* Unchanged Subtask Modal Content */}
         <div className="space-y-4 text-gray-800">
            <div className="space-y-1">
              <label className="text-xs font-bold text-gray-400 uppercase">Name</label>
@@ -639,6 +786,7 @@ const App: React.FC = () => {
       </Modal>
 
       <Modal isOpen={isEditSubtaskModalOpen} onClose={() => { setIsEditSubtaskModalOpen(false); resetSubtaskForm(); }} title="Edit Subtask">
+        {/* Unchanged Edit Modal Content */}
         <div className="space-y-4 text-gray-800">
            <div className="space-y-1">
              <label className="text-xs font-bold text-gray-400 uppercase">Name</label>

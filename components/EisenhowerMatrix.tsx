@@ -9,9 +9,23 @@ interface EisenhowerMatrixProps {
 }
 
 export const EisenhowerMatrix: React.FC<EisenhowerMatrixProps> = ({ projects, activeProjectId, onProjectSelect }) => {
+  // Filter available projects: For daily projects, only show if today is within range (roughly) or they are active
+  const visibleProjects = useMemo(() => {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    return projects.filter(p => {
+      if (p.isDaily && p.recurrenceEndDate) {
+        const end = new Date(p.recurrenceEndDate);
+        end.setHours(0,0,0,0);
+        return today <= end;
+      }
+      return true;
+    });
+  }, [projects]);
+
   const selectedProject = useMemo(() => {
-    return projects.find(p => p.id === activeProjectId) || (projects.length > 0 ? projects[0] : null);
-  }, [projects, activeProjectId]);
+    return visibleProjects.find(p => p.id === activeProjectId) || (visibleProjects.length > 0 ? visibleProjects[0] : null);
+  }, [visibleProjects, activeProjectId]);
 
   const quadrants = useMemo(() => {
     if (!selectedProject) return { q1: [], q2: [], q3: [], q4: [] };
@@ -25,10 +39,10 @@ export const EisenhowerMatrix: React.FC<EisenhowerMatrixProps> = ({ projects, ac
     }, { q1: [] as Subtask[], q2: [] as Subtask[], q3: [] as Subtask[], q4: [] as Subtask[] });
   }, [selectedProject]);
 
-  if (projects.length === 0) {
+  if (visibleProjects.length === 0) {
     return (
       <div className="h-64 flex flex-col items-center justify-center text-white/40 border-2 border-dashed border-white/10 rounded-3xl">
-        <p>No projects available for matrix view.</p>
+        <p>No active projects available for matrix view.</p>
       </div>
     );
   }
@@ -47,6 +61,7 @@ export const EisenhowerMatrix: React.FC<EisenhowerMatrixProps> = ({ projects, ac
         {tasks.length > 0 ? tasks.map(task => (
           <div key={task.id} className="bg-black/20 p-3 rounded-xl border border-white/5 flex items-center justify-between group">
             <div className="flex items-center gap-3 overflow-hidden">
+              {/* For daily tasks, standard completion check logic might need adjustment if using daily progress, but subtasks don't track daily progress individually in this model yet. keeping standard. */}
               {task.completedSessions >= task.targetSessions ? 
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : 
                 <Circle className="w-4 h-4 text-white/40 shrink-0" />
@@ -76,11 +91,11 @@ export const EisenhowerMatrix: React.FC<EisenhowerMatrixProps> = ({ projects, ac
           <span className="text-sm font-normal text-white/40 px-3 py-1 bg-white/5 rounded-full border border-white/5">Visual Priority Tool</span>
         </h3>
         <select 
-          value={activeProjectId || ''} 
+          value={selectedProject?.id || ''} 
           onChange={(e) => onProjectSelect(e.target.value)}
           className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-rose-500 transition-all text-white"
         >
-          {projects.map(p => <option key={p.id} value={p.id} className="bg-gray-800">{p.name}</option>)}
+          {visibleProjects.map(p => <option key={p.id} value={p.id} className="bg-gray-800">{p.name}</option>)}
         </select>
       </div>
 

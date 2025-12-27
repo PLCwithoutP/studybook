@@ -82,7 +82,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           />
         )}
         {activeTab === 'matrix' && <EisenhowerMatrix projects={projects} activeProjectId={activeProjectId} onProjectSelect={onProjectSelect} />}
-        {activeTab === 'progress' && <GanttChart projects={projects} />}
+        {activeTab === 'progress' && <GanttChart projects={projects} history={history} />}
         {activeTab === 'gantt' && <GanttTimeline projects={projects} settings={settings} />}
       </div>
     </div>

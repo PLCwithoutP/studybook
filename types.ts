@@ -18,11 +18,15 @@ export interface Project {
   description?: string;
   subtasks: Subtask[];
   createdAt: string;
+  isDaily?: boolean;
+  recurrenceEndDate?: string;
 }
 
 export interface AppSessionLog {
   date: string;
   duration: string; // Format hh:mm:ss
+  projectId?: string;
+  subtaskId?: string;
 }
 
 export interface AppSettings {

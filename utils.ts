@@ -28,7 +28,7 @@ export const calculateProjectStats = (subtasks: any[]) => {
   let totalSessions = 0;
   let completedSessions = 0;
 
-  subtasks.forEach((t) => {
+  subtasks.forEach((t: any) => {
     totalSessions += t.targetSessions;
     completedSessions += t.completedSessions;
   });
@@ -52,4 +52,16 @@ export const hexToRgba = (hex: string, alpha: number): string => {
   if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(0,0,0,${alpha})`;
   
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+// Helper to count sessions from history for a specific project on a specific date string
+export const getDailyProjectCompletion = (projectId: string, dateStr: string, history: any[]) => {
+  // Filter history for this project and date
+  // Note: history date format matches MonthlyCalendar's format (e.g. "01 January 2024")
+  const logs = history.filter((log: any) => log.projectId === projectId && log.date === dateStr);
+  
+  // Estimate sessions from duration or just count logs
+  // Assuming 1 log = 1 session for simplicity in this context, or we could parse duration
+  // Let's assume 1 log = 1 session completed
+  return logs.length;
 };

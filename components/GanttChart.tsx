@@ -1,12 +1,16 @@
-import React from 'react';
-import { Project } from '../types';
+import React, { useMemo } from 'react';
+import { Project, AppSessionLog } from '../types';
+import { Repeat } from 'lucide-react';
 
 interface GanttChartProps {
   projects: Project[];
+  history: AppSessionLog[];
 }
 
-export const GanttChart: React.FC<GanttChartProps> = ({ projects }) => {
-  if (projects.length === 0) {
+export const GanttChart: React.FC<GanttChartProps> = ({ projects, history }) => {
+  const visibleProjects = projects; // Show all projects including daily ones
+
+  if (visibleProjects.length === 0) {
     return (
       <div className="h-64 flex flex-col items-center justify-center text-white/40 border-2 border-dashed border-white/10 rounded-3xl">
         <p>No projects created yet.</p>
@@ -14,18 +18,38 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects }) => {
     );
   }
 
+  const getProgress = (project: Project) => {
+    if (project.isDaily) {
+        return { isDaily: true };
+    } else {
+        return { isDaily: false };
+    }
+  };
+
   return (
     <div className="w-full space-y-12">
-      {projects.map(project => (
+      {visibleProjects.map(project => {
+        const { isDaily } = getProgress(project);
+        
+        return (
         <div key={project.id} className="bg-white/5 rounded-3xl p-6 border border-white/10">
-          <h4 className="text-xl font-bold mb-6 flex items-center justify-between">
+          <h4 className="text-xl font-bold mb-6 flex items-center gap-2">
             {project.name}
-            <span className="text-sm font-mono opacity-40">Created: {new Date(project.createdAt).toLocaleDateString()}</span>
+            {isDaily && <div className="bg-yellow-400 text-black text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1"><Repeat className="w-3 h-3" /> Daily</div>}
+            <span className="text-sm font-mono opacity-40 ml-auto font-normal">Created: {new Date(project.createdAt).toLocaleDateString()}</span>
           </h4>
           
           <div className="space-y-4">
             {project.subtasks.map(task => {
-              const progress = (task.completedSessions / task.targetSessions) * 100;
+              let completed = task.completedSessions;
+              
+              // For daily tasks, calculate completion based on TODAY's history logs
+              if (isDaily) {
+                   const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+                   completed = history.filter(l => l.subtaskId === task.id && l.date === todayStr).length;
+              }
+
+              const progress = task.targetSessions > 0 ? (completed / task.targetSessions) * 100 : 0;
               const isCompleted = progress >= 100;
               
               return (
@@ -35,7 +59,7 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects }) => {
                       {task.name}
                     </span>
                     <span className="text-xs font-mono opacity-50">
-                      {task.completedSessions} / {task.targetSessions} Sessions
+                      {completed} / {task.targetSessions} {isDaily ? '(Today)' : 'Sessions'}
                     </span>
                   </div>
                   <div className="h-6 bg-black/30 rounded-full overflow-hidden flex">
@@ -55,14 +79,13 @@ export const GanttChart: React.FC<GanttChartProps> = ({ projects }) => {
               );
             })}
           </div>
+          {isDaily && <div className="mt-4 text-[10px] text-white/40 italic text-right">Showing progress for current day only.</div>}
         </div>
-      ))}
-
-      {projects.length > 0 && (
-         <div className="text-center text-white/30 text-sm mt-8 italic">
-            Visualizing task completion status relative to target durations.
-         </div>
-      )}
+      )})}
+      
+      <div className="text-center text-white/30 text-sm mt-8 italic">
+         Visualizing task completion status relative to target durations.
+      </div>
     </div>
   );
 };
